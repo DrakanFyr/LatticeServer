@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" Version="2.64.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.64.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="../../LatticeSDK/protos/**/*.proto" GrpcServices="None" ProtoRoot="../../LatticeSDK/protos" />
+    <Protobuf Update="../../LatticeSDK/protos/anduril/entitymanager/v1/entity_manager_api.pub.proto" GrpcServices="Client" />
+    <Protobuf Update="../../LatticeSDK/protos/anduril/taskmanager/v1/task_manager_api.pub.proto" GrpcServices="Client" />
+  </ItemGroup>
+
+</Project>
