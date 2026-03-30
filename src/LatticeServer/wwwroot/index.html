@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lattice Server — Entity Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58a6ff; }
+
+    #status-bar { display: flex; align-items: center; gap: 20px; margin-left: auto; font-size: 13px; color: #8b949e; }
+    .stat { display: flex; align-items: center; gap: 6px; }
+    .stat-value { font-weight: 600; color: #e6edf3; }
+
+    #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; transition: background 0.3s; }
+    #conn-dot.disconnected { background: #f85149; }
+    #conn-dot.connecting   { background: #d29922; animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ── Layout ── */
+    #content { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Panel ── */
+    #panel {
+      width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      overflow: hidden;
+    }
+
+    #panel-header {
+      padding: 0 14px;
+      height: 40px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: #8b949e;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #panel-count { background: #30363d; color: #e6edf3; font-size: 11px; font-weight: 600; border-radius: 10px; padding: 1px 7px; margin-left: auto; }
+
+    #back-btn {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+    #back-btn:hover { color: #58a6ff; }
+
+    /* ── Entity list ── */
+    #entity-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    #entity-list::-webkit-scrollbar { width: 6px; }
+    #entity-list::-webkit-scrollbar-track { background: transparent; }
+    #entity-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+    /* ── Group / section headers ── */
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 4px 6px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #8b949e;
+    }
+    .group-header:hover { color: #e6edf3; }
+    .group-chevron { font-size: 9px; transition: transform 0.15s; flex-shrink: 0; }
+    .group-header.collapsed .group-chevron { transform: rotate(-90deg); }
+    .group-count { background: #30363d; color: #8b949e; font-size: 10px; font-weight: 600; border-radius: 8px; padding: 0 6px; margin-left: auto; }
+    .group-cards { display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; }
+    .group-cards.collapsed { display: none; }
+
+    /* ── Entity cards ── */
+    .entity-card {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .entity-card:hover        { border-color: #58a6ff; background: #111820; }
+    .entity-card.selected     { border-color: #58a6ff; background: #111820; }
+    .entity-card.no-location  { opacity: 0.6; }
+    .card-name { font-size: 13px; font-weight: 600; color: #e6edf3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .card-meta { display: flex; flex-direction: column; gap: 2px; }
+    .card-location { font-size: 11px; color: #8b949e; font-family: "SF Mono","Fira Code",monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-location.missing { color: #484f58; font-style: italic; font-family: inherit; }
+    .card-updated { font-size: 11px; color: #484f58; }
+
+    #panel-empty { padding: 24px 14px; font-size: 13px; color: #484f58; text-align: center; }
+
+    /* ── Detail view ── */
+    #detail-view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    #detail-view.visible { display: flex; }
+
+    .detail-hero {
+      padding: 14px;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    .detail-name { font-size: 15px; font-weight: 700; color: #e6edf3; margin-bottom: 4px; word-break: break-word; }
+    .detail-id   { font-size: 11px; font-family: "SF Mono","Fira Code",monospace; color: #484f58; word-break: break-all; }
+
+    /* ── Detail tabs ── */
+    .detail-tabs {
+      display: flex;
+      flex-shrink: 0;
+      border-bottom: 1px solid #30363d;
+      background: #161b22;
+    }
+    .detail-tab {
+      flex: 1;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: #8b949e;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .detail-tab:hover              { color: #e6edf3; }
+    .detail-tab.active             { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+    /* ── Detail tab content area ── */
+    #detail-tab-content {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    #detail-tab-content::-webkit-scrollbar { width: 6px; }
+    #detail-tab-content::-webkit-scrollbar-track { background: transparent; }
+    #detail-tab-content::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+    /* ── Entity tab sections ── */
+    .detail-section { padding: 10px 14px 6px; border-bottom: 1px solid #21262d; }
+    .detail-section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: #484f58; margin-bottom: 8px; }
+    .detail-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; }
+    .detail-label { font-size: 12px; color: #8b949e; flex-shrink: 0; }
+    .detail-value { font-size: 12px; color: #e6edf3; text-align: right; word-break: break-word; font-family: "SF Mono","Fira Code",monospace; }
+    .detail-value.plain { font-family: inherit; }
+    .detail-value.tag { font-family: inherit; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 8px; }
+    .tag-friendly   { background: #0d2c0d; color: #3fb950; }
+    .tag-hostile    { background: #2c0d0d; color: #f85149; }
+    .tag-suspicious { background: #2c1a0d; color: #d29922; }
+    .tag-neutral    { background: #1a1a2c; color: #8b949e; }
+    .tag-unknown    { background: #21262d; color: #484f58; }
+
+    /* ── Tasks tab ── */
+    .tasks-empty { padding: 24px 14px; font-size: 13px; color: #484f58; text-align: center; }
+    .tasks-loading { padding: 20px 14px; font-size: 13px; color: #8b949e; text-align: center; }
+
+    .task-section-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px 6px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #8b949e;
+    }
+    .task-section-header:hover { color: #e6edf3; }
+    .task-section-header.collapsed .group-chevron { transform: rotate(-90deg); }
+    .task-section-cards { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 6px; }
+    .task-section-cards.collapsed { display: none; }
+
+    .task-card {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .task-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .task-card-id { font-size: 11px; font-family: "SF Mono","Fira Code",monospace; color: #8b949e; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-card-desc { font-size: 12px; color: #c9d1d9; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-card-meta { font-size: 11px; color: #484f58; display: flex; gap: 10px; flex-wrap: wrap; }
+    .task-card-error { font-size: 11px; color: #f85149; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Status badges */
+    .task-badge {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 1px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .badge-executing    { background: #0d2c0d; color: #3fb950; }
+    .badge-pending      { background: #2c2000; color: #d29922; }
+    .badge-ack          { background: #0d1f2c; color: #58a6ff; }
+    .badge-transitioning { background: #2c1a00; color: #e3812a; }
+    .badge-done-ok      { background: #0d1f1f; color: #39c5c5; }
+    .badge-done-not-ok  { background: #2c0d0d; color: #f85149; }
+    .badge-terminal     { background: #21262d; color: #8b949e; }
+    .badge-unknown      { background: #21262d; color: #484f58; }
+
+    /* ── Status picker ── */
+    .task-status-btn {
+      flex-shrink: 0;
+      background: none;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 5px;
+      line-height: 1.6;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .task-status-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+    #status-picker {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      min-width: 170px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #status-picker::-webkit-scrollbar { width: 4px; }
+    #status-picker::-webkit-scrollbar-track { background: transparent; }
+    #status-picker::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+    .status-picker-label {
+      padding: 4px 8px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: #484f58;
+    }
+    .status-picker-option {
+      display: block;
+      width: 100%;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: left;
+      border: none;
+      margin: 1px 0;
+      letter-spacing: 0.2px;
+    }
+    .status-picker-option:hover { filter: brightness(1.3); }
+
+    /* ── Dev tab ── */
+    .dev-tab-content { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .dev-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #0d1117;
+      color: #e6edf3;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .dev-btn:hover         { border-color: #58a6ff; background: #111820; }
+    .dev-btn.dev-btn-warn  { border-color: #d29922; color: #d29922; }
+    .dev-btn.dev-btn-warn:hover { border-color: #e3b341; background: #1e1a0e; }
+    .dev-btn.dev-btn-danger { border-color: #f85149; color: #f85149; }
+    .dev-btn.dev-btn-danger:hover { border-color: #ff7b72; background: #1e0e0e; }
+    .dev-btn-icon { font-size: 15px; flex-shrink: 0; }
+
+    /* ── Entity JSON modal ── */
+    #entity-json-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+    }
+    #entity-json-modal.visible { display: flex; }
+    .json-modal-box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      width: min(860px, 92vw);
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+    }
+    .json-modal-header {
+      display: flex;
+      align-items: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+    .json-modal-title { font-size: 13px; font-weight: 600; color: #e6edf3; flex: 1; }
+    .json-modal-copy, .json-modal-close {
+      background: none;
+      border: 1px solid #30363d;
+      border-radius: 5px;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 3px 10px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .json-modal-copy:hover  { border-color: #58a6ff; color: #58a6ff; }
+    .json-modal-close:hover { border-color: #f85149; color: #f85149; }
+    .json-modal-body {
+      flex: 1;
+      overflow: auto;
+      padding: 14px;
+    }
+    .json-modal-body::-webkit-scrollbar { width: 6px; height: 6px; }
+    .json-modal-body::-webkit-scrollbar-track { background: transparent; }
+    .json-modal-body::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    #entity-json-pre {
+      margin: 0;
+      font-family: "SF Mono","Fira Code",monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #e6edf3;
+      white-space: pre;
+    }
+    .json-key    { color: #79c0ff; }
+    .json-string { color: #a5d6ff; }
+    .json-number { color: #79c0ff; }
+    .json-bool   { color: #ff7b72; }
+    .json-null   { color: #8b949e; }
+
+    /* ── Map ── */
+    #map { flex: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lattice Server</h1>
+    <div id="status-bar">
+      <div class="stat">
+        <span>With location:</span>
+        <span class="stat-value" id="located-count">0</span>
+      </div>
+      <div class="stat">
+        <div id="conn-dot" class="connecting"></div>
+        <span id="conn-label">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="content">
+    <div id="panel">
+      <div id="panel-header">
+        <button id="back-btn" onclick="clearSelection()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M7.5 1.5L3 6l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Back
+        </button>
+        <span id="panel-title">Entities</span>
+        <span id="panel-count">0</span>
+      </div>
+
+      <div id="entity-list">
+        <div id="panel-empty">No entities yet</div>
+      </div>
+
+      <div id="detail-view">
+        <div class="detail-hero">
+          <div class="detail-name" id="detail-hero-name"></div>
+          <div class="detail-id"   id="detail-hero-id"></div>
+        </div>
+        <div class="detail-tabs">
+          <button class="detail-tab active" data-tab="entity" onclick="switchDetailTab('entity')">Entity</button>
+          <button class="detail-tab"        data-tab="tasks"  onclick="switchDetailTab('tasks')">Tasks</button>
+          <button class="detail-tab"        data-tab="dev"    onclick="switchDetailTab('dev')">Dev</button>
+        </div>
+        <div id="detail-tab-content"></div>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <!-- Entity JSON modal -->
+  <div id="entity-json-modal" onclick="handleJsonModalBackdropClick(event)">
+    <div class="json-modal-box">
+      <div class="json-modal-header">
+        <span class="json-modal-title">Entity JSON</span>
+        <button class="json-modal-copy" onclick="copyEntityJson()">Copy</button>
+        <button class="json-modal-close" onclick="closeEntityJsonModal()">✕</button>
+      </div>
+      <div class="json-modal-body">
+        <pre id="entity-json-pre"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status picker popup -->
+  <div id="status-picker">
+    <div class="status-picker-label">Set Status</div>
+    <div id="status-picker-options"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script>
+    // -------------------------------------------------------------------------
+    // Map
+    // -------------------------------------------------------------------------
+    const map = L.map('map', { center: [20, 0], zoom: 2, worldCopyJump: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+    const clusterGroup = L.markerClusterGroup({ chunkedLoading: true });
+    map.addLayer(clusterGroup);
+
+    // -------------------------------------------------------------------------
+    // Entity state  —  entityId -> { entity, marker, lastUpdated }
+    // -------------------------------------------------------------------------
+    const entityMap = new Map();
+    let selectedEntityId  = null;
+    let currentDetailTab  = 'entity';   // 'entity' | 'tasks'
+
+    // -------------------------------------------------------------------------
+    // Task state  —  taskId -> Task  (highest definitionVersion kept)
+    // -------------------------------------------------------------------------
+    const taskCache = new Map();
+    let tasksInitiallyFetched = false;
+    let taskStreamActive      = false;
+
+    const collapsedGroups       = new Set();
+    const collapsedTaskSections = new Set();
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+    function getLatLng(entity) {
+      const pos = entity?.location?.position;
+      if (!pos) return null;
+      const lat = pos.latitudeDegrees, lng = pos.longitudeDegrees;
+      if (lat === undefined || lng === undefined || (lat === 0 && lng === 0)) return null;
+      return [lat, lng];
+    }
+
+    function getDisplayName(entity) {
+      return entity?.aliases?.name || entity?.entityId || 'Unknown';
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function relativeTime(date) {
+      const s = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (s < 5)  return 'just now';
+      if (s < 60) return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      return `${Math.floor(m / 60)}h ago`;
+    }
+
+    function formatCoords(latlng) {
+      if (!latlng) return null;
+      return `${Math.abs(latlng[0]).toFixed(4)}${latlng[0]>=0?'° N':'° S'}, ${Math.abs(latlng[1]).toFixed(4)}${latlng[1]>=0?'° E':'° W'}`;
+    }
+
+    function fmtEnum(value, prefix) {
+      if (!value || value.endsWith('_INVALID') || value.endsWith('_UNKNOWN')) return null;
+      const s = prefix && value.startsWith(prefix) ? value.slice(prefix.length) : value;
+      return s.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+    }
+
+    function formatTimestamp(ts) {
+      if (!ts) return null;
+      try { return new Date(ts).toLocaleString(); } catch { return ts; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity selection
+    // -------------------------------------------------------------------------
+    function selectEntity(entityId) {
+      selectedEntityId = entityId;
+      currentDetailTab = 'entity';
+      renderDetailView();
+      renderPanel();
+      const entry = entityMap.get(entityId);
+      if (entry?.marker) clusterGroup.zoomToShowLayer(entry.marker, () => {});
+    }
+
+    function clearSelection() {
+      selectedEntityId = null;
+      currentDetailTab = 'entity';
+      renderDetailView();
+      renderPanel();
+    }
+
+    function switchDetailTab(tab) {
+      currentDetailTab = tab;
+      // Update tab active states
+      for (const btn of document.querySelectorAll('.detail-tab')) {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      }
+      // Lazy-load tasks on first visit
+      if (tab === 'tasks') ensureTasksLoaded();
+      renderDetailTabContent();
+    }
+
+    // -------------------------------------------------------------------------
+    // Detail view — hero + tabs shell (structure always in DOM)
+    // -------------------------------------------------------------------------
+    function renderDetailView() {
+      const detailEl = document.getElementById('detail-view');
+      const listEl   = document.getElementById('entity-list');
+      const backBtn  = document.getElementById('back-btn');
+      const titleEl  = document.getElementById('panel-title');
+      const countEl  = document.getElementById('panel-count');
+
+      if (!selectedEntityId) {
+        detailEl.classList.remove('visible');
+        listEl.style.display = '';
+        backBtn.style.display = 'none';
+        titleEl.textContent = 'Entities';
+        countEl.style.display = '';
+        return;
+      }
+
+      const entry = entityMap.get(selectedEntityId);
+      if (!entry) { clearSelection(); return; }
+
+      listEl.style.display = 'none';
+      detailEl.classList.add('visible');
+      backBtn.style.display = 'flex';
+      titleEl.textContent = '';
+      countEl.style.display = 'none';
+
+      document.getElementById('detail-hero-name').textContent = getDisplayName(entry.entity);
+      document.getElementById('detail-hero-id').textContent   = entry.entity.entityId || '';
+
+      for (const btn of document.querySelectorAll('.detail-tab')) {
+        btn.classList.toggle('active', btn.dataset.tab === currentDetailTab);
+      }
+
+      renderDetailTabContent();
+    }
+
+    function renderDetailTabContent() {
+      if (!selectedEntityId) return;
+      const entry = entityMap.get(selectedEntityId);
+      if (!entry) return;
+
+      const content = document.getElementById('detail-tab-content');
+      if (currentDetailTab === 'entity') {
+        content.innerHTML = buildEntityTabHtml(entry.entity, entry.lastUpdated);
+      } else if (currentDetailTab === 'dev') {
+        content.innerHTML = buildDevTabHtml(selectedEntityId);
+      } else {
+        content.innerHTML = buildTasksTabHtml(selectedEntityId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity tab HTML
+    // -------------------------------------------------------------------------
+    function buildEntityTabHtml(entity, lastUpdated) {
+      const parts = [];
+
+      const latlng = getLatLng(entity);
+      const pos    = entity?.location?.position;
+      const locRows = [];
+      if (latlng)                            locRows.push(detailRow('Coordinates', formatCoords(latlng)));
+      if (pos?.altitudeHaeMeters != null)    locRows.push(detailRow('Altitude (HAE)', `${Number(pos.altitudeHaeMeters).toFixed(1)} m`, true));
+      if (pos?.altitudeAglMeters != null)    locRows.push(detailRow('Altitude (AGL)', `${Number(pos.altitudeAglMeters).toFixed(1)} m`, true));
+      if (entity?.location?.speedMps != null) locRows.push(detailRow('Speed', `${Number(entity.location.speedMps).toFixed(1)} m/s`, true));
+      if (locRows.length) parts.push(detailSection('Location', locRows));
+
+      const milView  = entity?.milView;
+      const ontology = entity?.ontology;
+      const classRows = [];
+      const disp = fmtEnum(milView?.disposition, 'DISPOSITION_');
+      if (disp) classRows.push(detailRowDisposition(disp));
+      const env = fmtEnum(milView?.environment, 'ENVIRONMENT_');
+      if (env) classRows.push(detailRow('Environment', env, false));
+      const tmpl = fmtEnum(ontology?.template, 'TEMPLATE_');
+      if (tmpl) classRows.push(detailRow('Template', tmpl, false));
+      if (ontology?.platformType) classRows.push(detailRow('Platform type', ontology.platformType, false));
+      if (ontology?.specificType) classRows.push(detailRow('Specific type', ontology.specificType, false));
+      if (classRows.length) parts.push(detailSection('Classification', classRows));
+
+      const status = entity?.status;
+      const statusRows = [];
+      if (status?.platformActivity) statusRows.push(detailRow('Activity', status.platformActivity, false));
+      if (status?.role)             statusRows.push(detailRow('Role', status.role, false));
+      if (statusRows.length) parts.push(detailSection('Status', statusRows));
+
+      const prov = entity?.provenance;
+      const provRows = [];
+      if (prov?.integrationName)  provRows.push(detailRow('Integration', prov.integrationName, false));
+      if (prov?.dataType)         provRows.push(detailRow('Data type', prov.dataType, false));
+      if (prov?.sourceId)         provRows.push(detailRow('Source ID', prov.sourceId));
+      if (prov?.sourceUpdateTime) provRows.push(detailRow('Source updated', formatTimestamp(prov.sourceUpdateTime), false));
+      if (provRows.length) parts.push(detailSection('Provenance', provRows));
+
+      const lcRows = [];
+      if (entity?.createdTime)  lcRows.push(detailRow('Created', formatTimestamp(entity.createdTime), false));
+      if (entity?.noExpiry)     lcRows.push(detailRow('Expiry', 'No expiry', false));
+      else if (entity?.expiryTime) lcRows.push(detailRow('Expires', formatTimestamp(entity.expiryTime), false));
+      lcRows.push(detailRow('Last seen', relativeTime(lastUpdated), false));
+      parts.push(detailSection('Lifecycle', lcRows));
+
+      return parts.join('');
+    }
+
+    function detailSection(title, rows) {
+      return `<div class="detail-section"><div class="detail-section-title">${escapeHtml(title)}</div>${rows.join('')}</div>`;
+    }
+    function detailRow(label, value, mono = true) {
+      if (value == null || value === '') return '';
+      return `<div class="detail-row"><span class="detail-label">${escapeHtml(label)}</span><span class="detail-value${mono?'':' plain'}">${escapeHtml(String(value))}</span></div>`;
+    }
+    function detailRowDisposition(disp) {
+      const cls = { 'Friendly':'tag-friendly','Assumed Friendly':'tag-friendly','Hostile':'tag-hostile','Suspicious':'tag-suspicious','Neutral':'tag-neutral' }[disp] || 'tag-unknown';
+      return `<div class="detail-row"><span class="detail-label">Disposition</span><span class="detail-value tag ${cls}">${escapeHtml(disp)}</span></div>`;
+    }
+
+    // -------------------------------------------------------------------------
+    // Tasks tab HTML
+    // -------------------------------------------------------------------------
+
+    // Status sets
+    const STATUS_CURRENT     = new Set(['STATUS_EXECUTING']);
+    const STATUS_PAST        = new Set(['STATUS_DONE_OK','STATUS_DONE_NOT_OK','STATUS_REPLACED','STATUS_VERSION_REJECTED']);
+
+    function classifyTask(task) {
+      const s = task?.status?.status;
+      if (STATUS_CURRENT.has(s)) return 'current';
+      if (STATUS_PAST.has(s))    return 'past';
+      return 'pending';
+    }
+
+    function getTaskAssigneeEntityId(task) {
+      const assignee = task?.relations?.assignee;
+      if (!assignee) return null;
+      return assignee.system?.entityId || assignee.team?.entityId || null;
+    }
+
+    function fmtTaskStatus(status) {
+      if (!status) return 'Unknown';
+      const s = status.replace('STATUS_', '');
+      return s.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+    }
+
+    function taskBadgeClass(status) {
+      if (!status) return 'badge-unknown';
+      if (status === 'STATUS_EXECUTING')    return 'badge-executing';
+      if (status === 'STATUS_DONE_OK')      return 'badge-done-ok';
+      if (status === 'STATUS_DONE_NOT_OK')  return 'badge-done-not-ok';
+      if (STATUS_PAST.has(status))          return 'badge-terminal';
+      if (['STATUS_ACK','STATUS_WILCO','STATUS_MACHINE_RECEIPT'].includes(status)) return 'badge-ack';
+      if (['STATUS_CANCEL_REQUESTED','STATUS_COMPLETE_REQUESTED'].includes(status)) return 'badge-transitioning';
+      return 'badge-pending';
+    }
+
+    function fmtSpecType(task) {
+      const url = task?.specification?.typeUrl;
+      if (!url) return null;
+      const parts = url.split('.');
+      return parts[parts.length - 1] || null;
+    }
+
+    function buildTasksTabHtml(entityId) {
+      if (!tasksInitiallyFetched) {
+        return `<div class="tasks-loading">Loading tasks…</div>`;
+      }
+
+      // Filter tasks assigned to this entity
+      const allForEntity = [];
+      for (const task of taskCache.values()) {
+        if (getTaskAssigneeEntityId(task) === entityId) {
+          allForEntity.push(task);
+        }
+      }
+
+      if (allForEntity.length === 0) {
+        return `<div class="tasks-empty">No tasks assigned to this entity</div>`;
+      }
+
+      const buckets = { current: [], pending: [], past: [] };
+      for (const t of allForEntity) buckets[classifyTask(t)].push(t);
+
+      // Sort each bucket by lastUpdateTime descending
+      const byUpdateDesc = (a, b) => {
+        const ta = a.lastUpdateTime ? new Date(a.lastUpdateTime).getTime() : 0;
+        const tb = b.lastUpdateTime ? new Date(b.lastUpdateTime).getTime() : 0;
+        return tb - ta;
+      };
+      buckets.current.sort(byUpdateDesc);
+      buckets.pending.sort(byUpdateDesc);
+      buckets.past.sort(byUpdateDesc);
+
+      const SECTIONS = [
+        { key: 'current', label: 'Current Tasks' },
+        { key: 'pending', label: 'Pending Tasks' },
+        { key: 'past',    label: 'Past Tasks'    },
+      ];
+
+      return SECTIONS
+        .filter(s => buckets[s.key].length > 0)
+        .map(({ key, label }) => buildTaskSection(key, label, buckets[key]))
+        .join('');
+    }
+
+    function buildTaskSection(key, label, tasks) {
+      const collapsed = collapsedTaskSections.has(key);
+      const cards = tasks.map(buildTaskCardHtml).join('');
+      return `
+        <div class="task-section-header${collapsed ? ' collapsed' : ''}"
+             data-task-section="${key}"
+             onclick="toggleTaskSection('${key}')">
+          <span class="group-chevron">▼</span>
+          <span>${escapeHtml(label)}</span>
+          <span class="group-count">${tasks.length}</span>
+        </div>
+        <div class="task-section-cards${collapsed ? ' collapsed' : ''}" data-task-section-cards="${key}">
+          ${cards}
+        </div>`;
+    }
+
+    function buildTaskCardHtml(task) {
+      const id      = task?.version?.taskId || '—';
+      const status  = task?.status?.status;
+      const defVer  = task?.version?.definitionVersion;
+      const desc    = task?.description;
+      const specType = fmtSpecType(task);
+      const updated = task?.lastUpdateTime ? relativeTime(new Date(task.lastUpdateTime)) : null;
+      const errMsg  = task?.status?.taskError?.message;
+      const badgeCls = taskBadgeClass(status);
+      const statusLabel = fmtTaskStatus(status);
+      const canChangeStatus = status !== 'STATUS_DONE_OK' && status !== 'STATUS_DONE_NOT_OK';
+
+      const metaParts = [];
+      if (specType) metaParts.push(escapeHtml(specType));
+      if (defVer)   metaParts.push(`v${defVer}`);
+      if (updated)  metaParts.push(`Updated ${escapeHtml(updated)}`);
+
+      return `<div class="task-card">
+        <div class="task-card-header">
+          <span class="task-card-id">${escapeHtml(id)}</span>
+          <span class="task-badge ${badgeCls}">${escapeHtml(statusLabel)}</span>
+          ${canChangeStatus ? `<button class="task-status-btn" title="Change status" onclick="openStatusPicker(event,'${escapeHtml(id)}')">⋯</button>` : ''}
+        </div>
+        ${desc ? `<div class="task-card-desc">${escapeHtml(desc)}</div>` : ''}
+        ${metaParts.length ? `<div class="task-card-meta">${metaParts.join(' · ')}</div>` : ''}
+        ${errMsg ? `<div class="task-card-error">${escapeHtml(errMsg)}</div>` : ''}
+      </div>`;
+    }
+
+    // -------------------------------------------------------------------------
+    // Dev tab
+    // -------------------------------------------------------------------------
+    function buildDevTabHtml(entityId) {
+      const id = escapeHtml(entityId);
+      return `<div class="dev-tab-content">
+        <button class="dev-btn" onclick="openEntityJsonModal('${id}')">
+          <span class="dev-btn-icon">{ }</span> Show Entity JSON
+        </button>
+        <button class="dev-btn dev-btn-warn" onclick="clearEntityTasks('${id}')">
+          <span class="dev-btn-icon">🗑</span> Clear Tasks
+        </button>
+        <button class="dev-btn dev-btn-danger" onclick="deleteEntity('${id}')">
+          <span class="dev-btn-icon">✕</span> Delete Entity
+        </button>
+      </div>`;
+    }
+
+    // ── Entity JSON modal ──
+    let jsonModalEntityId = null;
+
+    function syntaxHighlightJson(json) {
+      return json
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+          (match) => {
+            if (/^"/.test(match)) {
+              return /:$/.test(match)
+                ? `<span class="json-key">${match}</span>`
+                : `<span class="json-string">${match}</span>`;
+            }
+            if (/true|false/.test(match)) return `<span class="json-bool">${match}</span>`;
+            if (/null/.test(match))       return `<span class="json-null">${match}</span>`;
+            return `<span class="json-number">${match}</span>`;
+          });
+    }
+
+    function refreshJsonModalContent() {
+      if (!jsonModalEntityId) return;
+      const entry = entityMap.get(jsonModalEntityId);
+      if (!entry) return;
+      const json = JSON.stringify(entry.entity, null, 2);
+      document.getElementById('entity-json-pre').innerHTML = syntaxHighlightJson(json);
+    }
+
+    function openEntityJsonModal(entityId) {
+      jsonModalEntityId = entityId;
+      refreshJsonModalContent();
+      document.getElementById('entity-json-modal').classList.add('visible');
+    }
+
+    function closeEntityJsonModal() {
+      document.getElementById('entity-json-modal').classList.remove('visible');
+      jsonModalEntityId = null;
+    }
+
+    function handleJsonModalBackdropClick(event) {
+      if (event.target === document.getElementById('entity-json-modal')) {
+        closeEntityJsonModal();
+      }
+    }
+
+    function copyEntityJson() {
+      const text = document.getElementById('entity-json-pre').textContent;
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+
+    // ── Dev actions ──
+    async function clearEntityTasks(entityId) {
+      try {
+        const res = await fetch(`/api/v1/tasks/byAssignee/${encodeURIComponent(entityId)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Remove cleared tasks from local cache
+          for (const [id, task] of taskCache.entries()) {
+            if (getTaskAssigneeEntityId(task) === entityId) taskCache.delete(id);
+          }
+          if (selectedEntityId === entityId && currentDetailTab === 'tasks') {
+            renderDetailTabContent();
+          }
+          console.info(`Cleared ${data.deletedCount} task(s) for entity ${entityId}`);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.error('Clear tasks failed:', err.message || res.status);
+        }
+      } catch (err) {
+        console.error('Clear tasks request failed:', err);
+      }
+    }
+
+    async function deleteEntity(entityId) {
+      try {
+        const res = await fetch(`/api/v1/entities/${encodeURIComponent(entityId)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          // SSE will broadcast the delete event which calls removeEntity + clearSelection
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.error('Delete entity failed:', err.message || res.status);
+        }
+      } catch (err) {
+        console.error('Delete entity request failed:', err);
+      }
+    }
+
+    function toggleTaskSection(key) {
+      collapsedTaskSections.has(key) ? collapsedTaskSections.delete(key) : collapsedTaskSections.add(key);
+      const header = document.querySelector(`.task-section-header[data-task-section="${key}"]`);
+      const cards  = document.querySelector(`.task-section-cards[data-task-section-cards="${key}"]`);
+      if (header) header.classList.toggle('collapsed', collapsedTaskSections.has(key));
+      if (cards)  cards.classList.toggle('collapsed',  collapsedTaskSections.has(key));
+    }
+
+    // -------------------------------------------------------------------------
+    // Task status picker
+    // -------------------------------------------------------------------------
+    const ALL_STATUSES = [
+      { value: 'STATUS_SENT',               label: 'Sent' },
+      { value: 'STATUS_ACK',                label: 'Ack' },
+      { value: 'STATUS_WILCO',              label: 'Wilco' },
+      { value: 'STATUS_MACHINE_RECEIPT',    label: 'Machine Receipt' },
+      { value: 'STATUS_EXECUTING',          label: 'Executing' },
+      { value: 'STATUS_CANCEL_REQUESTED',   label: 'Cancel Requested' },
+      { value: 'STATUS_COMPLETE_REQUESTED', label: 'Complete Requested' },
+      { value: 'STATUS_DONE_OK',            label: 'Done Ok' },
+      { value: 'STATUS_DONE_NOT_OK',        label: 'Done Not Ok' },
+      { value: 'STATUS_REPLACED',           label: 'Replaced' },
+      { value: 'STATUS_VERSION_REJECTED',   label: 'Version Rejected' },
+    ];
+
+    let statusPickerTaskId = null;
+
+    function openStatusPicker(event, taskId) {
+      event.stopPropagation();
+      const task = taskCache.get(taskId);
+      if (!task) return;
+
+      const currentStatus = task?.status?.status;
+      statusPickerTaskId = taskId;
+
+      const optionsEl = document.getElementById('status-picker-options');
+      optionsEl.innerHTML = ALL_STATUSES
+        .filter(s => s.value !== currentStatus)
+        .map(s => {
+          const cls = taskBadgeClass(s.value);
+          return `<button class="status-picker-option ${cls}" onclick="applyTaskStatus('${escapeHtml(taskId)}','${s.value}')">${escapeHtml(s.label)}</button>`;
+        })
+        .join('');
+
+      const picker = document.getElementById('status-picker');
+      picker.style.display = 'block';
+
+      // Position: prefer below the button, flip up if near bottom edge
+      const rect = event.currentTarget.getBoundingClientRect();
+      const pickerH = 300; // max-height
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < pickerH && rect.top > pickerH) {
+        picker.style.top  = `${rect.top - picker.offsetHeight - 4}px`;
+      } else {
+        picker.style.top  = `${rect.bottom + 4}px`;
+      }
+      picker.style.left = `${Math.min(rect.left, window.innerWidth - 180)}px`;
+    }
+
+    function closeStatusPicker() {
+      document.getElementById('status-picker').style.display = 'none';
+      statusPickerTaskId = null;
+    }
+
+    async function applyTaskStatus(taskId, newStatus) {
+      closeStatusPicker();
+      const task = taskCache.get(taskId);
+      if (!task) return;
+
+      const statusVersion = task?.version?.statusVersion || 0;
+
+      try {
+        const res = await fetch(`/api/v1/tasks/${encodeURIComponent(taskId)}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            version: { statusVersion },
+            newStatus: { status: newStatus },
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.error('Status update failed:', err.message || res.status);
+        }
+        // SSE will deliver the updated task automatically
+      } catch (err) {
+        console.error('Status update request failed:', err);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Task cache
+    // -------------------------------------------------------------------------
+    function upsertTaskInCache(task) {
+      const id = task?.version?.taskId;
+      if (!id) return;
+      const existing = taskCache.get(id);
+      const newVer   = task?.version?.definitionVersion || 0;
+      if (!existing || newVer >= (existing?.version?.definitionVersion || 0)) {
+        taskCache.set(id, task);
+      }
+    }
+
+    async function ensureTasksLoaded() {
+      if (tasksInitiallyFetched) return;
+      // Fetch all tasks once so we have terminal tasks too
+      try {
+        const res = await fetch('/api/v1/tasks/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          for (const t of data.tasks || []) upsertTaskInCache(t);
+        }
+      } catch { /* ignore */ }
+      tasksInitiallyFetched = true;
+
+      if (!taskStreamActive) connectTaskStream();
+
+      // Re-render tasks tab if it's currently visible
+      if (selectedEntityId && currentDetailTab === 'tasks') renderDetailTabContent();
+    }
+
+    // -------------------------------------------------------------------------
+    // Task SSE stream
+    // -------------------------------------------------------------------------
+    async function connectTaskStream() {
+      taskStreamActive = true;
+
+      let response;
+      try {
+        response = await fetch('/api/v1/tasks/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ heartbeatIntervalMs: 15000 }),
+        });
+      } catch {
+        taskStreamActive = false;
+        setTimeout(connectTaskStream, 5000);
+        return;
+      }
+
+      if (!response.ok) {
+        taskStreamActive = false;
+        setTimeout(connectTaskStream, 5000);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop();
+          for (const block of blocks) handleTaskSseBlock(block);
+        }
+      } catch { /* stream closed */ }
+
+      taskStreamActive = false;
+      setTimeout(connectTaskStream, 3000);
+    }
+
+    function handleTaskSseBlock(block) {
+      let eventType = '', data = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: '))     eventType = line.slice(7).trim();
+        else if (line.startsWith('data: ')) data      = line.slice(6).trim();
+      }
+      if (eventType === 'heartbeat' || !data) return;
+      if (!['CREATE','UPDATE','PREEXISTING'].includes(eventType)) return;
+
+      let taskEvent;
+      try { taskEvent = JSON.parse(data); } catch { return; }
+
+      const task = taskEvent.task;
+      if (!task) return;
+
+      upsertTaskInCache(task);
+
+      // Re-render if this task's assignee is the currently-selected entity on the Tasks tab
+      if (selectedEntityId && currentDetailTab === 'tasks') {
+        if (getTaskAssigneeEntityId(task) === selectedEntityId) {
+          renderDetailTabContent();
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity list panel
+    // -------------------------------------------------------------------------
+    const GROUPS = [
+      { key: 'assets', label: 'Assets' },
+      { key: 'tracks', label: 'Tracks' },
+      { key: 'other',  label: 'Other'  },
+    ];
+
+    function getGroupKey(entity) {
+      const t = entity?.ontology?.template;
+      if (t === 'TEMPLATE_ASSET') return 'assets';
+      if (t === 'TEMPLATE_TRACK') return 'tracks';
+      return 'other';
+    }
+
+    function renderPanel() {
+      if (selectedEntityId) return;
+
+      const list    = document.getElementById('entity-list');
+      const empty   = document.getElementById('panel-empty');
+      const countEl = document.getElementById('panel-count');
+
+      countEl.textContent = entityMap.size;
+      if (entityMap.size === 0) { list.innerHTML = ''; list.appendChild(empty); return; }
+
+      const sorted = [...entityMap.values()].sort(
+        (a, b) => getDisplayName(a.entity).localeCompare(getDisplayName(b.entity))
+      );
+      const buckets = { assets: [], tracks: [], other: [] };
+      for (const e of sorted) buckets[getGroupKey(e.entity)].push(e);
+
+      const existingCards = new Map();
+      for (const el of list.querySelectorAll('.entity-card')) existingCards.set(el.dataset.entityId, el);
+
+      const fragment = document.createDocumentFragment();
+      for (const { key, label } of GROUPS) {
+        const entries = buckets[key];
+        if (!entries.length) continue;
+        const collapsed = collapsedGroups.has(key);
+
+        const header = document.createElement('div');
+        header.className = 'group-header' + (collapsed ? ' collapsed' : '');
+        header.dataset.groupKey = key;
+        header.innerHTML = `<span class="group-chevron">▼</span><span>${label}</span><span class="group-count">${entries.length}</span>`;
+        header.addEventListener('click', () => toggleGroup(key));
+        fragment.appendChild(header);
+
+        const cardsEl = document.createElement('div');
+        cardsEl.className = 'group-cards' + (collapsed ? ' collapsed' : '');
+        cardsEl.dataset.groupCards = key;
+
+        for (const { entity, lastUpdated } of entries) {
+          const id       = entity.entityId;
+          const latlng   = getLatLng(entity);
+          const coordStr = formatCoords(latlng);
+
+          let card = existingCards.get(id);
+          if (!card) {
+            card = document.createElement('div');
+            card.className = 'entity-card';
+            card.dataset.entityId = id;
+            card.innerHTML = `<div class="card-name"></div><div class="card-meta"><div class="card-location"></div><div class="card-updated"></div></div>`;
+            card.addEventListener('click', () => selectEntity(id));
+          }
+          card.classList.toggle('no-location', !latlng);
+          card.classList.toggle('selected', id === selectedEntityId);
+          card.querySelector('.card-name').textContent = getDisplayName(entity);
+          const locEl = card.querySelector('.card-location');
+          locEl.textContent = coordStr || 'No location';
+          locEl.classList.toggle('missing', !coordStr);
+          card.querySelector('.card-updated').textContent = `Updated ${relativeTime(lastUpdated)}`;
+          cardsEl.appendChild(card);
+        }
+        fragment.appendChild(cardsEl);
+      }
+
+      list.innerHTML = '';
+      list.appendChild(fragment);
+
+      const located = sorted.filter(e => getLatLng(e.entity)).length;
+      document.getElementById('located-count').textContent = located;
+    }
+
+    function toggleGroup(key) {
+      collapsedGroups.has(key) ? collapsedGroups.delete(key) : collapsedGroups.add(key);
+      document.querySelector(`.group-header[data-group-key="${key}"]`)?.classList.toggle('collapsed', collapsedGroups.has(key));
+      document.querySelector(`.group-cards[data-group-cards="${key}"]`)?.classList.toggle('collapsed', collapsedGroups.has(key));
+    }
+
+    // Periodic timestamp refresh
+    setInterval(() => {
+      if (selectedEntityId) {
+        // Nothing to refresh in Tasks tab (timestamps re-render on events)
+        return;
+      }
+      for (const card of document.querySelectorAll('.entity-card')) {
+        const entry = entityMap.get(card.dataset.entityId);
+        if (entry) card.querySelector('.card-updated').textContent = `Updated ${relativeTime(entry.lastUpdated)}`;
+      }
+    }, 10_000);
+
+    // -------------------------------------------------------------------------
+    // Entity upsert / remove
+    // -------------------------------------------------------------------------
+    function upsertEntity(entity, eventTime) {
+      const id = entity.entityId;
+      if (!id) return;
+
+      const existing = entityMap.get(id) || { entity: null, marker: null, lastUpdated: null };
+      existing.entity = entity;
+      existing.lastUpdated = eventTime || new Date();
+
+      const latlng = getLatLng(entity);
+      if (latlng) {
+        if (existing.marker) {
+          clusterGroup.removeLayer(existing.marker);
+          existing.marker.setLatLng(latlng);
+          clusterGroup.addLayer(existing.marker);
+        } else {
+          const marker = L.marker(latlng);
+          marker.on('click', () => selectEntity(id));
+          existing.marker = marker;
+          clusterGroup.addLayer(marker);
+        }
+      } else if (existing.marker) {
+        clusterGroup.removeLayer(existing.marker);
+        existing.marker = null;
+      }
+
+      entityMap.set(id, existing);
+
+      if (jsonModalEntityId === id) refreshJsonModalContent();
+      if (selectedEntityId === id) renderDetailView();
+      else renderPanel();
+    }
+
+    function removeEntity(entity) {
+      const id = entity?.entityId;
+      if (!id) return;
+      const existing = entityMap.get(id);
+      if (existing?.marker) clusterGroup.removeLayer(existing.marker);
+      entityMap.delete(id);
+      if (jsonModalEntityId === id) closeEntityJsonModal();
+      if (selectedEntityId === id) clearSelection();
+      else renderPanel();
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity SSE stream
+    // -------------------------------------------------------------------------
+    function setConnState(state) {
+      document.getElementById('conn-dot').className = state;
+      document.getElementById('conn-label').textContent =
+        { connecting: 'Connecting…', connected: 'Connected', disconnected: 'Disconnected' }[state] || state;
+    }
+
+    async function connectStream() {
+      setConnState('connecting');
+      let response;
+      try {
+        response = await fetch('/api/v1/entities/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ heartbeatIntervalMs: 15000 }),
+        });
+      } catch {
+        setConnState('disconnected');
+        setTimeout(connectStream, 5000);
+        return;
+      }
+      if (!response.ok) { setConnState('disconnected'); setTimeout(connectStream, 5000); return; }
+
+      setConnState('connected');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop();
+          for (const block of blocks) handleEntitySseBlock(block);
+        }
+      } catch { /* closed */ }
+
+      setConnState('disconnected');
+      setTimeout(connectStream, 3000);
+    }
+
+    function handleEntitySseBlock(block) {
+      let eventType = '', data = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: '))     eventType = line.slice(7).trim();
+        else if (line.startsWith('data: ')) data      = line.slice(6).trim();
+      }
+      if (eventType === 'heartbeat' || eventType !== 'entity' || !data) return;
+
+      let entityEvent;
+      try { entityEvent = JSON.parse(data); } catch { return; }
+
+      const entity = entityEvent.entity;
+      if (!entity) return;
+      const eventTime = entityEvent.time ? new Date(entityEvent.time) : new Date();
+
+      if (entityEvent.eventType === 'EVENT_TYPE_DELETED') removeEntity(entity);
+      else upsertEntity(entity, eventTime);
+    }
+
+    // Close status picker on outside click
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('status-picker');
+      if (picker.style.display !== 'none' && !picker.contains(e.target)) {
+        closeStatusPicker();
+      }
+    });
+
+    connectStream();
+  </script>
+</body>
+</html>

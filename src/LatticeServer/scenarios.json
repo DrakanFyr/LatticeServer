@@ -1,0 +1,46 @@
+{
+  "activeScenario": "default",
+  "scenarios": {
+    "default": {
+      "name": "Default",
+      "description": "Simulates a track and an asset for basic testing.",
+      "entities": [
+        {
+          "entityId": "25c0ac87-94d0-4238-b1bd-15b6c2c6ea9e",
+          "template": "Track",
+          "name": "Simulated Track",
+          "integrationName": "lattice-server-scenario",
+          "dataType": "Simulated Track",
+          "latitude": 47.6147980,
+          "longitude": -122.1949701,
+          "disposition": "Unknown",
+          "environment": "Ground",
+          "expirySeconds": 15,
+          "refreshIntervalSeconds": 5
+        },
+        {
+          "entityId": "706e0dbd-ed7c-417c-b3c5-93524bf9247c",
+          "template": "Asset",
+          "name": "Simulated Asset",
+          "integrationName": "lattice-server-scenario",
+          "dataType": "Simulated Asset",
+          "latitude": 47.6139891,
+          "longitude": -122.1947269,
+          "altitudeHaeMeters": 55.0,
+          "speedMps": 0.0,
+          "velocityE": 1.0,
+          "velocityN": 1.0,
+          "velocityU": 0.0,
+          "disposition": "Friendly",
+          "environment": "Air",
+          "platformType": "UAS",
+          "taskSpecificationUrls": [
+            "type.googleapis.com/anduril.tasks.v2.Investigate"
+          ],
+          "expirySeconds": 15,
+          "refreshIntervalSeconds": 5
+        }
+      ]
+    }
+  }
+}

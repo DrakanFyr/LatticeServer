@@ -182,6 +182,27 @@ public class EntitiesController : ControllerBase
     }
 
     /// <summary>
+    /// DELETE /api/v1/entities/{entityId} - Delete entity
+    /// </summary>
+    [HttpDelete("api/v1/entities/{entityId}")]
+    public IActionResult DeleteEntity(string entityId)
+    {
+        if (string.IsNullOrEmpty(entityId))
+        {
+            return BadRequest(new { code = "INVALID_ARGUMENT", message = "entity_id is required" });
+        }
+
+        var deleted = _store.DeleteEntity(entityId);
+        if (!deleted)
+        {
+            return NotFound(new { code = "NOT_FOUND", message = $"Entity {entityId} not found" });
+        }
+
+        _logger.LogInformation("REST DeleteEntity for {EntityId}", entityId);
+        return Ok(new { entityId, deleted = true });
+    }
+
+    /// <summary>
     /// POST /api/v1/entities/stream - Stream entity events (SSE)
     /// </summary>
     [HttpPost("api/v1/entities/stream")]

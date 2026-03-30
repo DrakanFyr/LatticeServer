@@ -51,6 +51,34 @@ public class TaskStore
     }
 
     /// <summary>
+    /// Removes all tasks assigned to the given entity ID. Returns the count removed.
+    /// </summary>
+    public int DeleteTasksByAssignee(string assigneeEntityId)
+    {
+        var toRemove = _tasks.Values
+            .Where(t => GetAssigneeEntityId(t) == assigneeEntityId)
+            .Select(t => t.Version.TaskId)
+            .ToList();
+
+        foreach (var id in toRemove)
+            _tasks.TryRemove(id, out _);
+
+        return toRemove.Count;
+    }
+
+    private static string? GetAssigneeEntityId(Anduril.Taskmanager.V1.Task task)
+    {
+        var assignee = task.Relations?.Assignee;
+        if (assignee == null) return null;
+        return assignee.AgentCase switch
+        {
+            Principal.AgentOneofCase.System => assignee.System.EntityId,
+            Principal.AgentOneofCase.Team   => assignee.Team.EntityId,
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Creates a subscription channel that receives task events.
     /// </summary>
     public Channel<TaskEvent> Subscribe()

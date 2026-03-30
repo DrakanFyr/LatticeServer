@@ -23,10 +23,13 @@ builder.Services.AddControllers()
 builder.Services.AddSingleton<EntityStore>();
 builder.Services.AddSingleton<TaskStore>();
 builder.Services.AddSingleton<ObjectStore>();
+builder.Services.AddHostedService<ScenarioService>();
 
 var app = builder.Build();
 
 app.UseCors();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseGrpcWeb();
 
 app.MapGrpcService<EntityManagerService>().EnableGrpcWeb();

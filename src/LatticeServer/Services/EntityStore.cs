@@ -163,6 +163,25 @@ public class EntityStore
     }
 
     /// <summary>
+    /// Deletes an entity by ID, broadcasting a Deleted event. Returns false if not found.
+    /// </summary>
+    public bool DeleteEntity(string entityId)
+    {
+        if (_entities.TryRemove(entityId, out var entity))
+        {
+            _overrides.TryRemove(entityId, out _);
+            NotifySubscribers(new EntityEvent
+            {
+                EventType = EventType.Deleted,
+                Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+                Entity = entity,
+            });
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Creates a subscription channel that receives entity events.
     /// </summary>
     public Channel<EntityEvent> Subscribe()

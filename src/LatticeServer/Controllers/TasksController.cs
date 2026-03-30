@@ -427,6 +427,22 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// DELETE /api/v1/tasks/byAssignee/{entityId} - Delete all tasks assigned to an entity
+    /// </summary>
+    [HttpDelete("api/v1/tasks/byAssignee/{entityId}")]
+    public IActionResult DeleteTasksByAssignee(string entityId)
+    {
+        if (string.IsNullOrEmpty(entityId))
+        {
+            return BadRequest(new { code = "INVALID_ARGUMENT", message = "entity_id is required" });
+        }
+
+        var count = _store.DeleteTasksByAssignee(entityId);
+        _logger.LogInformation("REST DeleteTasksByAssignee for {EntityId}: removed {Count} tasks", entityId, count);
+        return Ok(new { entityId, deletedCount = count });
+    }
+
+    /// <summary>
     /// POST /api/v1/tasks/stream - Stream task events (SSE)
     /// </summary>
     [HttpPost("api/v1/tasks/stream")]
