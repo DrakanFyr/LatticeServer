@@ -398,8 +398,166 @@
     .json-bool   { color: #ff7b72; }
     .json-null   { color: #8b949e; }
 
+    /* ── Task wizard ── */
+    #task-wizard { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    #task-wizard.visible { display: flex; }
+
+    .wizard-type-list {
+      flex: 1; overflow-y: auto; padding: 8px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .wizard-type-list::-webkit-scrollbar { width: 6px; }
+    .wizard-type-list::-webkit-scrollbar-track { background: transparent; }
+    .wizard-type-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    .task-type-btn {
+      display: block; width: 100%; padding: 10px 12px; border-radius: 6px;
+      border: 1px solid #30363d; background: #0d1117; color: #e6edf3;
+      font-size: 13px; font-weight: 500; cursor: pointer; text-align: left;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .task-type-btn:hover { border-color: #58a6ff; background: #111820; }
+    .task-type-url { font-size: 10px; color: #484f58; font-family: "SF Mono","Fira Code",monospace; margin-top: 2px; }
+
+    .wizard-form-scroll { flex: 1; overflow-y: auto; padding: 10px 14px 4px; }
+    .wizard-form-scroll::-webkit-scrollbar { width: 6px; }
+    .wizard-form-scroll::-webkit-scrollbar-track { background: transparent; }
+    .wizard-form-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+    .form-field { margin-bottom: 12px; }
+    .form-label { font-size: 11px; font-weight: 600; color: #8b949e; margin-bottom: 4px; letter-spacing: 0.3px; }
+    .form-label .required { color: #f85149; }
+    .form-input, .form-select {
+      width: 100%; background: #0d1117; border: 1px solid #30363d; color: #e6edf3;
+      border-radius: 5px; padding: 6px 8px; font-size: 12px; font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus, .form-select:focus { outline: none; border-color: #58a6ff; }
+    .form-input::placeholder { color: #484f58; }
+    .form-select option { background: #161b22; }
+    .form-group-header {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+      color: #484f58; margin: 10px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #21262d;
+    }
+
+    .obj-field-value {
+      font-size: 11px; color: #484f58; font-family: "SF Mono","Fira Code",monospace;
+      margin-bottom: 5px; min-height: 15px;
+    }
+    .obj-field-value.set { color: #79c0ff; }
+    .obj-btns { display: flex; gap: 6px; }
+    .obj-btn-map {
+      flex-shrink: 0; background: #0d1117; border: 1px solid #30363d; color: #8b949e;
+      border-radius: 5px; padding: 5px 8px; font-size: 11px; cursor: pointer;
+      white-space: nowrap; transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .obj-btn-map:hover  { border-color: #58a6ff; color: #58a6ff; }
+    .obj-btn-map.active { border-color: #39d353; color: #39d353; background: #0d1a10; }
+    .map-pick-indicator {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: #39d353; margin-right: 5px; vertical-align: middle;
+      box-shadow: 0 0 4px #39d353; flex-shrink: 0;
+    }
+    .obj-alt-row {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+    }
+    .obj-alt-label {
+      font-size: 11px; color: #484f58; white-space: nowrap; flex-shrink: 0;
+    }
+    .obj-alt-input {
+      width: auto; flex: 1;
+    }
+
+    .wizard-footer {
+      display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #30363d; flex-shrink: 0;
+    }
+    .wizard-cancel-btn {
+      flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #30363d;
+      background: none; color: #8b949e; font-size: 13px; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .wizard-cancel-btn:hover { border-color: #8b949e; color: #e6edf3; }
+    .wizard-submit-btn {
+      flex: 2; padding: 8px; border-radius: 6px; border: none; background: #1f6feb;
+      color: #e6edf3; font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .wizard-submit-btn:hover:not(:disabled) { background: #388bfd; }
+    .wizard-submit-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    .entity-tab-actions {
+      padding: 14px; border-top: 1px solid #30363d; margin-top: auto;
+      position: relative;
+    }
+    .task-entity-btn {
+      width: 100%; padding: 9px 14px; border-radius: 6px; border: 1px solid #1f6feb;
+      background: #0c2a4a; color: #58a6ff; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .task-entity-btn:hover { background: #0d3460; border-color: #388bfd; }
+    .task-entity-btn .btn-caret { font-size: 10px; transition: transform 0.15s; }
+    .task-entity-btn.open .btn-caret { transform: rotate(180deg); }
+
+    /* ── Task-entity dropdown ── */
+    .task-entity-dropdown {
+      display: none;
+      position: absolute;
+      bottom: calc(100% - 14px);
+      left: 14px; right: 14px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.55);
+      overflow: hidden;
+      z-index: 200;
+    }
+    .task-entity-dropdown.open { display: block; }
+    .task-dropdown-header {
+      padding: 6px 10px 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+      color: #484f58; border-bottom: 1px solid #21262d;
+    }
+    .task-dropdown-item {
+      display: block; width: 100%; padding: 8px 10px;
+      border: none; background: none; color: #e6edf3;
+      font-size: 12px; font-weight: 500; cursor: pointer; text-align: left;
+      transition: background 0.1s, color 0.1s;
+    }
+    .task-dropdown-item + .task-dropdown-item { border-top: 1px solid #21262d; }
+    .task-dropdown-item:hover { background: #1c2128; color: #58a6ff; }
+    .task-dropdown-item-url { font-size: 10px; color: #484f58; font-family: "SF Mono","Fira Code",monospace; margin-top: 1px; }
+
     /* ── Map ── */
-    #map { flex: 1; }
+    #map-wrapper { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+    #map-wrapper.picking .leaflet-container { cursor: crosshair !important; }
+    #map-pick-banner {
+      display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: #d29922; color: #0d1117; font-size: 12px; font-weight: 700;
+      padding: 7px 16px; border-radius: 20px; z-index: 500; white-space: nowrap;
+      pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #map-pick-banner.visible { display: block; }
+
+    /* ── Entity map markers ── */
+    .entity-marker {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #58a6ff;
+      border: 3px solid rgba(255,255,255,0.55);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+    }
+    .entity-marker.highlighted {
+      background: #58a6ff;
+      border-color: #fff;
+      box-shadow: 0 0 0 0px rgba(57,211,83,0.85), 0 2px 8px rgba(0,0,0,0.55);
+      animation: marker-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes marker-pulse {
+      0%   { box-shadow: 0 0 0 0px  rgba(57,211,83,0.85), 0 2px 8px rgba(0,0,0,0.55); }
+      100% { box-shadow: 0 0 0 16px rgba(57,211,83,0.0),  0 2px 8px rgba(0,0,0,0.55); }
+    }
   </style>
 </head>
 <body>
@@ -420,7 +578,7 @@
   <div id="content">
     <div id="panel">
       <div id="panel-header">
-        <button id="back-btn" onclick="clearSelection()">
+        <button id="back-btn" onclick="handleBackBtn()">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M7.5 1.5L3 6l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -446,8 +604,14 @@
         </div>
         <div id="detail-tab-content"></div>
       </div>
+
+      <div id="task-wizard"></div>
     </div>
-    <div id="map"></div>
+
+    <div id="map-wrapper">
+      <div id="map"></div>
+      <div id="map-pick-banner">Click an entity marker to select it, or click the map to place a point · Esc to cancel</div>
+    </div>
   </div>
 
   <!-- Entity JSON modal -->
@@ -485,6 +649,23 @@
     map.addLayer(clusterGroup);
 
     // -------------------------------------------------------------------------
+    // Auto-fit: zoom to show all entities on initial load
+    // -------------------------------------------------------------------------
+    let hasAutoFitted = false;
+    let autoFitTimer  = null;
+
+    function scheduleAutoFit() {
+      if (hasAutoFitted) return;
+      clearTimeout(autoFitTimer);
+      autoFitTimer = setTimeout(() => {
+        if (hasAutoFitted) return;
+        hasAutoFitted = true;
+        const bounds = clusterGroup.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }, 600);
+    }
+
+    // -------------------------------------------------------------------------
     // Entity state  —  entityId -> { entity, marker, lastUpdated }
     // -------------------------------------------------------------------------
     const entityMap = new Map();
@@ -500,6 +681,17 @@
 
     const collapsedGroups       = new Set();
     const collapsedTaskSections = new Set();
+
+    // -------------------------------------------------------------------------
+    // Task wizard state
+    // -------------------------------------------------------------------------
+    let taskWizardActive    = false;
+    let taskWizardEntityId  = null;
+    let taskWizardSpecUrl   = null;
+    let taskFormValues      = {};   // fieldKey -> objective val, or '_input_'+fieldKey -> raw string
+    let mapPickField        = null; // fieldKey currently being picked from map
+    let mapPickHandler      = null; // leaflet handler ref for cleanup
+    const objectiveMarkers  = new Map(); // fieldKey -> L.Marker overlay shown during wizard
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -546,10 +738,29 @@
     }
 
     // -------------------------------------------------------------------------
+    // Marker icons
+    // -------------------------------------------------------------------------
+    function makeMarkerIcon(highlighted) {
+      return L.divIcon({
+        className: '',
+        html: `<div class="entity-marker${highlighted ? ' highlighted' : ''}"></div>`,
+        iconSize:   [26, 26],
+        iconAnchor: [13, 13],
+      });
+    }
+
+    function updateMarkerHighlight(entityId, highlighted) {
+      const entry = entityMap.get(entityId);
+      if (entry?.marker) entry.marker.setIcon(makeMarkerIcon(highlighted));
+    }
+
+    // -------------------------------------------------------------------------
     // Entity selection
     // -------------------------------------------------------------------------
     function selectEntity(entityId) {
+      if (selectedEntityId && selectedEntityId !== entityId) updateMarkerHighlight(selectedEntityId, false);
       selectedEntityId = entityId;
+      updateMarkerHighlight(entityId, true);
       currentDetailTab = 'entity';
       renderDetailView();
       renderPanel();
@@ -558,10 +769,16 @@
     }
 
     function clearSelection() {
+      if (selectedEntityId) updateMarkerHighlight(selectedEntityId, false);
       selectedEntityId = null;
       currentDetailTab = 'entity';
       renderDetailView();
       renderPanel();
+    }
+
+    function handleBackBtn() {
+      if (taskWizardActive) cancelTaskWizard();
+      else clearSelection();
     }
 
     function switchDetailTab(tab) {
@@ -580,6 +797,7 @@
     // -------------------------------------------------------------------------
     function renderDetailView() {
       const detailEl = document.getElementById('detail-view');
+      const wizardEl = document.getElementById('task-wizard');
       const listEl   = document.getElementById('entity-list');
       const backBtn  = document.getElementById('back-btn');
       const titleEl  = document.getElementById('panel-title');
@@ -587,6 +805,7 @@
 
       if (!selectedEntityId) {
         detailEl.classList.remove('visible');
+        wizardEl.classList.remove('visible');
         listEl.style.display = '';
         backBtn.style.display = 'none';
         titleEl.textContent = 'Entities';
@@ -598,10 +817,22 @@
       if (!entry) { clearSelection(); return; }
 
       listEl.style.display = 'none';
-      detailEl.classList.add('visible');
       backBtn.style.display = 'flex';
-      titleEl.textContent = '';
       countEl.style.display = 'none';
+
+      if (taskWizardActive) {
+        detailEl.classList.remove('visible');
+        wizardEl.classList.add('visible');
+        titleEl.textContent = taskWizardSpecUrl
+          ? (TASK_SCHEMAS[taskWizardSpecUrl]?.label || 'New Task')
+          : 'New Task';
+        renderTaskWizardContent();
+        return;
+      }
+
+      wizardEl.classList.remove('visible');
+      detailEl.classList.add('visible');
+      titleEl.textContent = '';
 
       document.getElementById('detail-hero-name').textContent = getDisplayName(entry.entity);
       document.getElementById('detail-hero-id').textContent   = entry.entity.entityId || '';
@@ -676,6 +907,29 @@
       else if (entity?.expiryTime) lcRows.push(detailRow('Expires', formatTimestamp(entity.expiryTime), false));
       lcRows.push(detailRow('Last seen', relativeTime(lastUpdated), false));
       parts.push(detailSection('Lifecycle', lcRows));
+
+      const catalog = entity?.taskCatalog?.taskDefinitions || [];
+      if (catalog.length > 0) {
+        const eid = escapeHtml(entity.entityId);
+        const items = catalog.map(def => {
+          const url   = def.taskSpecificationUrl;
+          const label = TASK_SCHEMAS[url]?.label || url.split('/').pop();
+          const short = url.replace('type.googleapis.com/', '');
+          return `<button class="task-dropdown-item" onclick="pickTaskTypeFromDropdown('${eid}','${escapeHtml(url)}')">
+            <div>${escapeHtml(label)}</div>
+            <div class="task-dropdown-item-url">${escapeHtml(short)}</div>
+          </button>`;
+        }).join('');
+        parts.push(`<div class="entity-tab-actions">
+          <div class="task-entity-dropdown" id="task-entity-dropdown">
+            <div class="task-dropdown-header">Select Task Type</div>
+            ${items}
+          </div>
+          <button class="task-entity-btn" id="task-entity-btn" onclick="toggleTaskEntityDropdown(event)">
+            <span>⚡ Task Entity</span><span class="btn-caret">▲</span>
+          </button>
+        </div>`);
+      }
 
       return parts.join('');
     }
@@ -1023,6 +1277,598 @@
     }
 
     // -------------------------------------------------------------------------
+    // Task wizard — schemas
+    // -------------------------------------------------------------------------
+    const ISR = [
+      { key: 'parameters.speedMS',          label: 'Speed (m/s)',           type: 'float_opt',  group: 'ISR Parameters' },
+      { key: 'parameters.standoffDistanceM', label: 'Standoff Distance (m)', type: 'float_opt',  group: 'ISR Parameters' },
+      { key: 'parameters.standoffAngle',     label: 'Standoff Angle (rad)',  type: 'float_opt',  group: 'ISR Parameters' },
+      { key: 'parameters.expirationTimeMs',  label: 'Expiration (ms)',       type: 'uint64_opt', group: 'ISR Parameters' },
+    ];
+
+    const TASK_SCHEMAS = {
+      'type.googleapis.com/anduril.tasks.v2.Investigate': {
+        label: 'Investigate',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
+      },
+      'type.googleapis.com/anduril.tasks.v2.VisualId': {
+        label: 'Visual ID',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Map': {
+        label: 'Map (SAR)',
+        fields: [
+          { key: 'objective',  label: 'Objective',  type: 'objective',   required: true },
+          { key: 'minNiirs',   label: 'Min NIIRS',  type: 'uint32_opt' },
+          ...ISR,
+        ],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Monitor': {
+        label: 'Monitor',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Shadow': {
+        label: 'Shadow',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Scan': {
+        label: 'Scan',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
+      },
+      'type.googleapis.com/anduril.tasks.v2.BattleDamageAssessment': {
+        label: 'Battle Damage Assessment',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Loiter': {
+        label: 'Loiter',
+        fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
+      },
+      'type.googleapis.com/anduril.tasks.v2.ImproveTrackQuality': {
+        label: 'Improve Track Quality',
+        fields: [
+          { key: 'objective',                label: 'Objective',              type: 'objective',   required: true },
+          { key: 'terminationTrackQuality',  label: 'Target Track Quality',   type: 'uint32_opt' },
+        ],
+      },
+      'type.googleapis.com/anduril.tasks.v2.AreaSearch': {
+        label: 'Area Search',
+        fields: [{ key: 'objective', label: 'Search Area', type: 'objective', required: true }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.VolumeSearch': {
+        label: 'Volume Search',
+        fields: [{ key: 'objective', label: 'Search Volume', type: 'objective', required: true }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Marshal': {
+        label: 'Marshal',
+        fields: [{ key: 'objective', label: 'Marshal Point', type: 'objective', required: true }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Transit': {
+        label: 'Transit',
+        fields: [{ key: '_destination', label: 'Destination', type: 'objective', required: true }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Strike': {
+        label: 'Strike',
+        fields: [
+          { key: 'objective',                 label: 'Strike Target',          type: 'objective',   required: true },
+          { key: 'parameters.runInBearing',   label: 'Run-In Bearing (°)',     type: 'float_opt',   group: 'Strike Parameters' },
+          { key: 'parameters.glideSlopeAngle', label: 'Glide Slope Angle (°)', type: 'float_opt',   group: 'Strike Parameters' },
+        ],
+      },
+      'type.googleapis.com/anduril.tasks.v2.Smack': {
+        label: 'Smack',
+        fields: [
+          { key: 'objective',                label: 'Strike Target',       type: 'objective',  required: true },
+          { key: 'parameters.runInBearing',  label: 'Run-In Bearing (°)', type: 'float_opt',  group: 'Strike Parameters' },
+        ],
+      },
+      'type.googleapis.com/anduril.tasks.v2.ReleasePayload': {
+        label: 'Release Payload',
+        fields: [{ key: 'objective', label: 'Drop Point (optional)', type: 'objective' }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.GimbalPoint': {
+        label: 'Gimbal Point',
+        fields: [{ key: 'lookAt', label: 'Look At', type: 'objective', required: true }],
+      },
+      'type.googleapis.com/anduril.tasks.v2.GimbalZoom': {
+        label: 'Gimbal Zoom',
+        fields: [
+          { key: 'setHorizontalFov',   label: 'Horizontal FOV (°)',  type: 'float_opt' },
+          { key: 'setMagnification',   label: 'Magnification',       type: 'float_opt' },
+        ],
+      },
+    };
+
+    // -------------------------------------------------------------------------
+    // Task wizard — state management
+    // -------------------------------------------------------------------------
+    function openTaskWizard(entityId) {
+      stopMapPick();
+      taskWizardActive   = true;
+      taskWizardEntityId = entityId;
+      taskWizardSpecUrl  = null;
+      taskFormValues     = {};
+      renderDetailView();
+    }
+
+    function cancelTaskWizard() {
+      stopMapPick();
+      clearObjectiveMarkers();
+      taskWizardActive   = false;
+      taskWizardEntityId = null;
+      taskWizardSpecUrl  = null;
+      taskFormValues     = {};
+      currentDetailTab   = 'entity';
+      renderDetailView();
+    }
+
+    function toggleTaskEntityDropdown(e) {
+      e.stopPropagation();
+      const dropdown = document.getElementById('task-entity-dropdown');
+      const btn      = document.getElementById('task-entity-btn');
+      if (!dropdown) return;
+      const isOpen = dropdown.classList.toggle('open');
+      btn.classList.toggle('open', isOpen);
+    }
+
+    function pickTaskTypeFromDropdown(entityId, specUrl) {
+      stopMapPick();
+      clearObjectiveMarkers();
+      taskWizardActive   = true;
+      taskWizardEntityId = entityId;
+      taskWizardSpecUrl  = specUrl;
+      taskFormValues     = {};
+      const schema = TASK_SCHEMAS[specUrl];
+      const firstObjField = schema?.fields.find(f => f.type === 'objective');
+      if (firstObjField) {
+        enterMapPickMode();
+        setMapPickField(firstObjField.key);
+      }
+      renderDetailView();
+    }
+
+    function selectTaskType(specUrl) {
+      saveFormInputs();
+      stopMapPick();
+      clearObjectiveMarkers();
+      taskWizardSpecUrl = specUrl;
+      taskFormValues    = {};
+      const schema = TASK_SCHEMAS[specUrl];
+      const firstObjField = schema?.fields.find(f => f.type === 'objective');
+      if (firstObjField) {
+        enterMapPickMode();
+        setMapPickField(firstObjField.key);
+      }
+      renderDetailView();
+    }
+
+    // -------------------------------------------------------------------------
+    // Task wizard — rendering
+    // -------------------------------------------------------------------------
+    function renderTaskWizardContent() {
+      const wizardEl = document.getElementById('task-wizard');
+
+      if (!taskWizardSpecUrl) {
+        const entry = entityMap.get(taskWizardEntityId);
+        const catalog = entry?.entity?.taskCatalog?.taskDefinitions || [];
+        wizardEl.innerHTML = buildTypePickerHtml(catalog) + wizardFooterHtml();
+        return;
+      }
+
+      const schema = TASK_SCHEMAS[taskWizardSpecUrl];
+      if (!schema) {
+        wizardEl.innerHTML = `<div style="padding:14px;color:#484f58;font-size:13px">Unknown task type: ${escapeHtml(taskWizardSpecUrl)}</div>` + wizardFooterHtml(true);
+        return;
+      }
+
+      wizardEl.innerHTML = buildTaskFormHtml(schema) + wizardFooterHtml(true);
+    }
+
+    function wizardFooterHtml(showSubmit = false) {
+      return `<div class="wizard-footer">
+        <button class="wizard-cancel-btn" onclick="cancelTaskWizard()">Cancel</button>
+        ${showSubmit ? `<button class="wizard-submit-btn" id="wizard-submit-btn" onclick="submitTask()">Create Task</button>` : ''}
+      </div>`;
+    }
+
+    function buildTypePickerHtml(catalog) {
+      if (!catalog.length) {
+        return `<div class="tasks-empty">No task types in this entity's catalog</div>`;
+      }
+      const items = catalog.map(def => {
+        const url   = def.taskSpecificationUrl;
+        const label = TASK_SCHEMAS[url]?.label || url.split('/').pop();
+        const short = url.replace('type.googleapis.com/', '');
+        return `<button class="task-type-btn" onclick="selectTaskType('${escapeHtml(url)}')">
+          <div>${escapeHtml(label)}</div>
+          <div class="task-type-url">${escapeHtml(short)}</div>
+        </button>`;
+      }).join('');
+      return `<div class="wizard-type-list">${items}</div>`;
+    }
+
+    function buildTaskFormHtml(schema) {
+      let html = '<div class="wizard-form-scroll">';
+      let currentGroup = null;
+      let inGroup = false;
+
+      for (const field of schema.fields) {
+        if (field.group && field.group !== currentGroup) {
+          if (inGroup) html += '</div>';
+          currentGroup = field.group;
+          inGroup = true;
+          html += `<div class="form-group-header">${escapeHtml(field.group)}</div><div class="form-group-fields">`;
+        } else if (!field.group && inGroup) {
+          html += '</div>';
+          inGroup = false;
+          currentGroup = null;
+        }
+        html += renderFieldHtml(field);
+      }
+
+      if (inGroup) html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    function renderFieldHtml(field) {
+      const domId  = 'tf-' + field.key.replace(/\./g, '__');
+      const reqStar = field.required ? ' <span class="required">*</span>' : '';
+
+      if (field.type === 'objective') {
+        const val         = taskFormValues[field.key];
+        const isPickingMap = mapPickField === field.key;
+
+        let valueText  = 'Not set';
+        let valueCls   = 'obj-field-value';
+        let selValue   = '';
+
+        if (val?.type === 'entity' && val.entityId) {
+          const e   = entityMap.get(val.entityId);
+          valueText = getDisplayName(e?.entity || { entityId: val.entityId });
+          valueCls += ' set';
+          selValue  = val.entityId;
+        } else if (val?.type === 'point') {
+          valueText = `${val.lat.toFixed(5)}°, ${val.lon.toFixed(5)}°`;
+          valueCls += ' set';
+        }
+
+        const opts = [...entityMap.values()]
+          .sort((a, b) => getDisplayName(a.entity).localeCompare(getDisplayName(b.entity)))
+          .map(e => {
+            const eid  = e.entity.entityId;
+            const name = getDisplayName(e.entity);
+            const sel  = selValue === eid ? ' selected' : '';
+            return `<option value="${escapeHtml(eid)}"${sel}>${escapeHtml(name)}</option>`;
+          }).join('');
+
+        const altRow = val?.type === 'point' ? `
+          <div class="obj-alt-row">
+            <span class="obj-alt-label">Alt (m AGL)</span>
+            <input class="form-input obj-alt-input" type="number" step="any" value="${val.alt ?? 0}"
+              oninput="setObjectiveAlt('${escapeHtml(field.key)}', this.value)" />
+          </div>` : '';
+
+        return `<div class="form-field">
+          <div class="form-label">${isPickingMap ? '<span class="map-pick-indicator"></span>' : ''}${escapeHtml(field.label)}${reqStar}</div>
+          <div class="${valueCls}">${escapeHtml(valueText)}</div>
+          ${altRow}
+          <div class="obj-btns">
+            <select class="form-select" style="flex:1;min-width:0" onchange="onObjectivePick('${escapeHtml(field.key)}',this.value)">
+              <option value="">— Pick entity —</option>
+              <option value="__map__"${isPickingMap ? ' selected' : ''}>📍 Choose on Map…</option>
+              ${opts}
+            </select>
+            <button class="obj-btn-map${isPickingMap ? ' active' : ''}" onclick="toggleMapPick('${escapeHtml(field.key)}')">📍 Map</button>
+          </div>
+        </div>`;
+      }
+
+      const savedVal = taskFormValues['_input_' + field.key] ?? '';
+
+      if (field.type === 'float_opt' || field.type === 'uint32_opt' || field.type === 'uint64_opt') {
+        const step = field.type === 'float_opt' ? 'any' : '1';
+        return `<div class="form-field">
+          <div class="form-label">${escapeHtml(field.label)}${reqStar}</div>
+          <input id="${domId}" class="form-input" type="number" step="${step}" placeholder="Optional" value="${escapeHtml(String(savedVal))}" />
+        </div>`;
+      }
+
+      if (field.type === 'string') {
+        return `<div class="form-field">
+          <div class="form-label">${escapeHtml(field.label)}${reqStar}</div>
+          <input id="${domId}" class="form-input" type="text" placeholder="Optional" value="${escapeHtml(String(savedVal))}" />
+        </div>`;
+      }
+
+      return '';
+    }
+
+    // -------------------------------------------------------------------------
+    // Task wizard — objective + map pick
+    // -------------------------------------------------------------------------
+    function setObjectiveAlt(fieldKey, altStr) {
+      const val = taskFormValues[fieldKey];
+      if (val?.type === 'point') val.alt = parseFloat(altStr) || 0;
+    }
+
+    const _objIconShapes = `
+      <circle cx="20" cy="20" r="11"/>
+      <line x1="20" y1="0"    x2="20" y2="9"/>
+      <line x1="20" y1="31"   x2="20" y2="40"/>
+      <line x1="0"  y1="20"   x2="9"  y2="20"/>
+      <line x1="31" y1="20"   x2="40" y2="20"/>
+      <line x1="20" y1="12"   x2="20" y2="16.5"/>
+      <line x1="20" y1="23.5" x2="20" y2="28"/>
+      <line x1="12" y1="20"   x2="16.5" y2="20"/>
+      <line x1="23.5" y1="20" x2="28"   y2="20"/>`;
+    const objectiveMarkerIcon = L.divIcon({
+      className: '',
+      html: `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+        <g fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="6"   stroke-linecap="round">${_objIconShapes}</g>
+        <g fill="none" stroke="#39d353"           stroke-width="3.5" stroke-linecap="round">${_objIconShapes}</g>
+      </svg>`,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+    });
+
+    function clearObjectiveMarkers() {
+      objectiveMarkers.forEach(m => m.remove());
+      objectiveMarkers.clear();
+    }
+
+    function updateObjectiveMarkers() {
+      const schema = TASK_SCHEMAS[taskWizardSpecUrl];
+      const fields = schema?.fields.filter(f => f.type === 'objective') || [];
+      const activeKeys = new Set();
+
+      for (const field of fields) {
+        const val = taskFormValues[field.key];
+        let latlng = null;
+
+        if (val?.type === 'point') {
+          latlng = [val.lat, val.lon];
+        } else if (val?.type === 'entity' && val.entityId) {
+          const entry = entityMap.get(val.entityId);
+          if (entry?.entity) latlng = getLatLng(entry.entity);
+        }
+
+        if (!latlng) {
+          objectiveMarkers.get(field.key)?.remove();
+          objectiveMarkers.delete(field.key);
+          continue;
+        }
+
+        activeKeys.add(field.key);
+        if (objectiveMarkers.has(field.key)) {
+          objectiveMarkers.get(field.key).setLatLng(latlng);
+        } else {
+          const m = L.marker(latlng, { icon: objectiveMarkerIcon, interactive: false, zIndexOffset: 1000 });
+          m.addTo(map);
+          objectiveMarkers.set(field.key, m);
+        }
+      }
+
+      // Remove markers for fields no longer in schema.
+      objectiveMarkers.forEach((m, key) => {
+        if (!activeKeys.has(key)) { m.remove(); objectiveMarkers.delete(key); }
+      });
+    }
+
+    function onObjectivePick(fieldKey, entityId) {
+      if (entityId === '__map__') {
+        toggleMapPick(fieldKey);
+        return;
+      }
+      saveFormInputs();
+      taskFormValues[fieldKey] = entityId ? { type: 'entity', entityId } : null;
+      updateObjectiveMarkers();
+      if (entityId && mapPickField) advanceMapPick(fieldKey);
+      renderTaskWizardContent();
+    }
+
+    // Enter the persistent map-picking UI state (adds CSS class + shows banner).
+    function enterMapPickMode() {
+      document.getElementById('map-wrapper').classList.add('picking');
+      document.getElementById('map-pick-banner').classList.add('visible');
+    }
+
+    // Switch the active field within an already-active picking session.
+    // Updates the banner label and re-registers the map click handler.
+    function setMapPickField(fieldKey) {
+      if (mapPickHandler) { map.off('click', mapPickHandler); mapPickHandler = null; }
+      mapPickField = fieldKey;
+      const schema = TASK_SCHEMAS[taskWizardSpecUrl];
+      const label  = schema?.fields.find(f => f.key === fieldKey)?.label || fieldKey;
+      const banner = document.getElementById('map-pick-banner');
+      if (banner) banner.textContent = `Picking "${label}" · click an entity marker or the map to place a point · Esc to cancel`;
+      mapPickHandler = (e) => {
+        const { lat, lng } = e.latlng;
+        const prev = mapPickField;
+        taskFormValues[prev] = { type: 'point', lat, lon: lng, alt: 0 };
+        updateObjectiveMarkers();
+        advanceMapPick(prev);
+        renderTaskWizardContent();
+      };
+      map.once('click', mapPickHandler);
+    }
+
+    // Advance to the next objective field (wraps around). Stays in picking mode.
+    function advanceMapPick(fromFieldKey) {
+      const schema = TASK_SCHEMAS[taskWizardSpecUrl];
+      if (!schema) { stopMapPick(); return; }
+      const objFields = schema.fields.filter(f => f.type === 'objective');
+      if (!objFields.length) { stopMapPick(); return; }
+      const idx = objFields.findIndex(f => f.key === fromFieldKey);
+      const nextIdx = (idx + 1) % objFields.length;
+      setMapPickField(objFields[nextIdx].key);
+    }
+
+    function toggleMapPick(fieldKey) {
+      saveFormInputs();
+      if (mapPickField === fieldKey) {
+        // Explicit toggle off — exit picking mode entirely.
+        stopMapPick();
+        renderTaskWizardContent();
+        return;
+      }
+      if (!mapPickField) enterMapPickMode();
+      setMapPickField(fieldKey);
+      renderTaskWizardContent();
+    }
+
+    function stopMapPick() {
+      if (mapPickHandler) { map.off('click', mapPickHandler); mapPickHandler = null; }
+      mapPickField = null;
+      document.getElementById('map-wrapper')?.classList.remove('picking');
+      document.getElementById('map-pick-banner')?.classList.remove('visible');
+    }
+
+    // Persist text/number input values before a re-render
+    function saveFormInputs() {
+      const schema = TASK_SCHEMAS[taskWizardSpecUrl];
+      if (!schema) return;
+      for (const field of schema.fields) {
+        if (field.type === 'objective') {
+          // Persist any in-progress altitude edit for point objectives.
+          const altEl = document.querySelector(`.obj-alt-input[oninput*="'${field.key}'"]`);
+          if (altEl && taskFormValues[field.key]?.type === 'point') {
+            taskFormValues[field.key].alt = parseFloat(altEl.value) || 0;
+          }
+          continue;
+        }
+        const el = document.getElementById('tf-' + field.key.replace(/\./g, '__'));
+        if (el) taskFormValues['_input_' + field.key] = el.value;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Task wizard — payload + submit
+    // -------------------------------------------------------------------------
+    function setNestedKey(obj, dotPath, value) {
+      const parts = dotPath.split('.');
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+        cur = cur[parts[i]];
+      }
+      cur[parts[parts.length - 1]] = value;
+    }
+
+    function cleanEmptyObjects(obj) {
+      if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return;
+      for (const k of Object.keys(obj)) {
+        if (k === '@type') continue;
+        cleanEmptyObjects(obj[k]);
+        if (typeof obj[k] === 'object' && !Array.isArray(obj[k]) && obj[k] !== null
+            && Object.keys(obj[k]).length === 0) {
+          delete obj[k];
+        }
+      }
+    }
+
+    function buildTaskPayload() {
+      const schema = TASK_SCHEMAS[taskWizardSpecUrl];
+      if (!schema) return null;
+
+      saveFormInputs();
+      const spec = { '@type': taskWizardSpecUrl };
+
+      for (const field of schema.fields) {
+        const key = field.key;
+
+        if (field.type === 'objective') {
+          const val = taskFormValues[key];
+          let objJson = null;
+          if (val?.type === 'entity' && val.entityId) {
+            objJson = { entityId: val.entityId };
+          } else if (val?.type === 'point' && val.lat !== undefined) {
+            objJson = { point: { referenceName: 'Selected Point', lla: { lat: val.lat, lon: val.lon, alt: val.alt || 0 } } };
+          }
+          if (objJson !== null) setNestedKey(spec, key, objJson);
+          continue;
+        }
+
+        const raw = (taskFormValues['_input_' + key] ?? '').toString().trim();
+        if (raw === '') continue;
+
+        if (field.type === 'float_opt') {
+          const n = parseFloat(raw);
+          if (!isNaN(n)) setNestedKey(spec, key, n);
+        } else if (field.type === 'uint32_opt' || field.type === 'uint64_opt') {
+          const n = parseInt(raw, 10);
+          if (!isNaN(n)) setNestedKey(spec, key, n);
+        } else if (field.type === 'string') {
+          setNestedKey(spec, key, raw);
+        }
+      }
+
+      // Special: Transit — convert _destination objective into nested RoutePlan
+      if (taskWizardSpecUrl === 'type.googleapis.com/anduril.tasks.v2.Transit') {
+        const dest = spec['_destination'];
+        delete spec['_destination'];
+        let lla = null;
+        if (dest?.entityId) {
+          const entry = entityMap.get(dest.entityId);
+          const ll = entry ? getLatLng(entry.entity) : null;
+          if (ll) lla = { lat: ll[0], lon: ll[1], alt: 0 };
+        } else if (dest?.point?.lla) {
+          lla = dest.point.lla;
+        }
+        if (lla) {
+          spec.plan = { route: { path: [{ waypoint: { llaPoint: { lla } } }] } };
+        }
+      }
+
+      cleanEmptyObjects(spec);
+      return spec;
+    }
+
+    async function submitTask() {
+      const spec = buildTaskPayload();
+      if (!spec) return;
+
+      const btn = document.getElementById('wizard-submit-btn');
+      if (btn) btn.disabled = true;
+
+      const body = {
+        relations: { assignee: { system: { entityId: taskWizardEntityId } } },
+        specification: spec,
+      };
+
+      try {
+        const res = await fetch('/api/v1/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+          cancelTaskWizard();
+          currentDetailTab = 'tasks';
+          tasksInitiallyFetched = false; // force re-fetch so new task appears
+          renderDetailView();
+          ensureTasksLoaded();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.error('Create task failed:', err.message || res.status);
+          if (btn) btn.disabled = false;
+        }
+      } catch (err) {
+        console.error('Create task request failed:', err);
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // ESC cancels map pick
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mapPickField) {
+        saveFormInputs();
+        stopMapPick();
+        if (taskWizardActive) renderTaskWizardContent();
+      }
+    });
+
+    // -------------------------------------------------------------------------
     // Task cache
     // -------------------------------------------------------------------------
     function upsertTaskInCache(task) {
@@ -1244,10 +2090,23 @@
         if (existing.marker) {
           clusterGroup.removeLayer(existing.marker);
           existing.marker.setLatLng(latlng);
+          existing.marker.setIcon(makeMarkerIcon(id === selectedEntityId));
           clusterGroup.addLayer(existing.marker);
         } else {
-          const marker = L.marker(latlng);
-          marker.on('click', () => selectEntity(id));
+          const marker = L.marker(latlng, { icon: makeMarkerIcon(id === selectedEntityId) });
+          marker.on('click', (e) => {
+            if (mapPickField) {
+              L.DomEvent.stopPropagation(e);
+              saveFormInputs();
+              const prev = mapPickField;
+              taskFormValues[prev] = { type: 'entity', entityId: id };
+              updateObjectiveMarkers();
+              advanceMapPick(prev);
+              renderTaskWizardContent();
+            } else if (!taskWizardActive) {
+              selectEntity(id);
+            }
+          });
           existing.marker = marker;
           clusterGroup.addLayer(marker);
         }
@@ -1258,7 +2117,15 @@
 
       entityMap.set(id, existing);
 
+      if (existing.marker) scheduleAutoFit();
       if (jsonModalEntityId === id) refreshJsonModalContent();
+      // If this entity is used as an objective, reposition its overlay marker.
+      if (taskWizardActive && objectiveMarkers.size > 0) {
+        const usedAsObjective = [...objectiveMarkers.keys()].some(
+          key => taskFormValues[key]?.type === 'entity' && taskFormValues[key]?.entityId === id
+        );
+        if (usedAsObjective) updateObjectiveMarkers();
+      }
       if (selectedEntityId === id) renderDetailView();
       else renderPanel();
     }
@@ -1342,6 +2209,13 @@
       const picker = document.getElementById('status-picker');
       if (picker.style.display !== 'none' && !picker.contains(e.target)) {
         closeStatusPicker();
+      }
+      // Close task-entity dropdown on outside click
+      const dropdown = document.getElementById('task-entity-dropdown');
+      const btn      = document.getElementById('task-entity-btn');
+      if (dropdown?.classList.contains('open') && !dropdown.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
+        dropdown.classList.remove('open');
+        btn?.classList.remove('open');
       }
     });
 
