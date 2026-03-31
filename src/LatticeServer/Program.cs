@@ -25,7 +25,16 @@ builder.Services.AddSingleton<TaskStore>();
 builder.Services.AddSingleton<ObjectStore>();
 builder.Services.AddHostedService<ScenarioService>();
 
+builder.WebHost.UseShutdownTimeout(TimeSpan.FromSeconds(2));
+
 var app = builder.Build();
+
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopping.Register(() =>
+{
+    app.Services.GetRequiredService<EntityStore>().Shutdown();
+    app.Services.GetRequiredService<TaskStore>().Shutdown();
+});
 
 app.UseCors();
 app.UseDefaultFiles();

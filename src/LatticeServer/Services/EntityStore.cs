@@ -212,6 +212,20 @@ public class EntityStore
         channel.Writer.TryComplete();
     }
 
+    /// <summary>
+    /// Completes all subscriber channels, signalling EOF to all active streams.
+    /// Call this during application shutdown.
+    /// </summary>
+    public void Shutdown()
+    {
+        lock (_subscriberLock)
+        {
+            foreach (var subscriber in _subscribers)
+                subscriber.Writer.TryComplete();
+            _subscribers.Clear();
+        }
+    }
+
     private void NotifySubscribers(EntityEvent entityEvent)
     {
         lock (_subscriberLock)
