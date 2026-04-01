@@ -11,8 +11,20 @@ namespace LatticeServer.Services;
 public class TaskStore
 {
     private readonly ConcurrentDictionary<string, Anduril.Taskmanager.V1.Task> _tasks = new();
+    private readonly ConcurrentDictionary<string, string> _rawSpecJson = new();
     private readonly List<Channel<TaskEvent>> _subscribers = [];
     private readonly Lock _subscriberLock = new();
+
+    /// <summary>
+    /// Stores the raw specification JSON for a task (keyed by task ID).
+    /// </summary>
+    public void StoreSpecJson(string taskId, string specJson) => _rawSpecJson[taskId] = specJson;
+
+    /// <summary>
+    /// Returns the raw specification JSON for a task, or null if not stored.
+    /// </summary>
+    public string? GetSpecJson(string taskId) =>
+        _rawSpecJson.TryGetValue(taskId, out var json) ? json : null;
 
     /// <summary>
     /// Stores a task. Returns the task event that was generated.
@@ -60,7 +72,10 @@ public class TaskStore
         foreach (var id in ids)
         {
             if (_tasks.TryRemove(id, out _))
+            {
+                _rawSpecJson.TryRemove(id, out _);
                 count++;
+            }
         }
         return count;
     }
@@ -76,7 +91,10 @@ public class TaskStore
             .ToList();
 
         foreach (var id in toRemove)
+        {
             _tasks.TryRemove(id, out _);
+            _rawSpecJson.TryRemove(id, out _);
+        }
 
         return toRemove.Count;
     }

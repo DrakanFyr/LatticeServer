@@ -39,6 +39,31 @@ let currentDetailTab  = 'entity';   // 'entity' | 'tasks'
 const panelEmptyEl = document.getElementById('panel-empty');
 
 // -------------------------------------------------------------------------
+// Task type config  —  typeUrl -> { type, displayName, description, executionTag }
+// -------------------------------------------------------------------------
+const taskTypeConfig = new Map();
+
+async function loadTaskTypeConfig() {
+  try {
+    const res = await fetch('/task-types.json');
+    if (!res.ok) return;
+    const entries = await res.json();
+    for (const entry of entries) taskTypeConfig.set(entry.type, entry);
+  } catch { /* non-fatal: fall back to raw type names */ }
+}
+
+function getTaskDisplayName(url) {
+  return taskTypeConfig.get(url)?.displayName || (url ? url.split('.').pop() : null);
+}
+
+function getTaskDescription(url) {
+  return taskTypeConfig.get(url)?.description || null;
+}
+
+function getTaskExecutionTag(url) {
+  return taskTypeConfig.get(url)?.executionTag || null;
+}
+
 // Task state  —  taskId -> Task  (highest definitionVersion kept)
 // -------------------------------------------------------------------------
 const taskCache = new Map();
@@ -190,7 +215,7 @@ function renderDetailView() {
     detailEl.classList.remove('visible');
     wizardEl.classList.add('visible');
     titleEl.textContent = taskWizardSpecUrl
-      ? (TASK_SCHEMAS[taskWizardSpecUrl]?.label || 'New Task')
+      ? (getTaskDisplayName(taskWizardSpecUrl) || 'New Task')
       : 'New Task';
     renderTaskWizardContent();
     return;
@@ -279,11 +304,11 @@ function buildEntityTabHtml(entity, lastUpdated) {
     const eid = escapeHtml(entity.entityId);
     const items = catalog.map(def => {
       const url   = def.taskSpecificationUrl;
-      const label = TASK_SCHEMAS[url]?.label || url.split('/').pop();
-      const short = url.replace('type.googleapis.com/', '');
+      const label = getTaskDisplayName(url);
+      const desc  = getTaskDescription(url);
       return `<button class="task-dropdown-item" onclick="pickTaskTypeFromDropdown('${eid}','${escapeHtml(url)}')">
         <div>${escapeHtml(label)}</div>
-        <div class="task-dropdown-item-url">${escapeHtml(short)}</div>
+        ${desc ? `<div class="task-dropdown-item-desc">${escapeHtml(desc)}</div>` : ''}
       </button>`;
     }).join('');
     parts.push(`<div class="entity-tab-actions">
@@ -351,10 +376,20 @@ function taskBadgeClass(status) {
 }
 
 function fmtSpecType(task) {
-  const url = task?.specification?.typeUrl;
+  const url = task?.specification?.['@type'] || task?.specification?.typeUrl;
   if (!url) return null;
   const parts = url.split('.');
   return parts[parts.length - 1] || null;
+}
+
+function getExecutingTaskVerb(entityId) {
+  for (const task of taskCache.values()) {
+    if (task?.status?.status === 'STATUS_EXECUTING' && getTaskAssigneeEntityId(task) === entityId) {
+      const url = task?.specification?.['@type'] || task?.specification?.typeUrl;
+      return getTaskExecutionTag(url) || null;
+    }
+  }
+  return null;
 }
 
 function buildTasksTabHtml(entityId) {
@@ -420,7 +455,8 @@ function buildTaskCardHtml(task) {
   const status  = task?.status?.status;
   const defVer  = task?.version?.definitionVersion;
   const desc    = task?.description;
-  const specType = fmtSpecType(task);
+  const specUrl = task?.specification?.['@type'] || task?.specification?.typeUrl;
+  const specType = getTaskDisplayName(specUrl) || fmtSpecType(task);
   const updated = task?.lastUpdateTime ? relativeTime(new Date(task.lastUpdateTime)) : null;
   const errMsg  = task?.status?.taskError?.message;
   const badgeCls = taskBadgeClass(status);
@@ -428,7 +464,6 @@ function buildTaskCardHtml(task) {
   const canChangeStatus = status !== 'STATUS_DONE_OK' && status !== 'STATUS_DONE_NOT_OK';
 
   const metaParts = [];
-  if (specType) metaParts.push(escapeHtml(specType));
   if (defVer)   metaParts.push(`v${defVer}`);
   if (updated)  metaParts.push(`Updated ${escapeHtml(updated)}`);
 
@@ -438,6 +473,7 @@ function buildTaskCardHtml(task) {
       <span class="task-badge ${badgeCls}">${escapeHtml(statusLabel)}</span>
       ${canChangeStatus ? `<button class="task-status-btn" title="Change status" onclick="openStatusPicker(event,'${escapeHtml(id)}')">⋯</button>` : ''}
     </div>
+    ${specType ? `<div class="task-card-type">${escapeHtml(specType)}</div>` : ''}
     ${desc ? `<div class="task-card-desc">${escapeHtml(desc)}</div>` : ''}
     ${metaParts.length ? `<div class="task-card-meta">${metaParts.join(' · ')}</div>` : ''}
     ${errMsg ? `<div class="task-card-error">${escapeHtml(errMsg)}</div>` : ''}
@@ -654,15 +690,12 @@ const ISR = [
 
 const TASK_SCHEMAS = {
   'type.googleapis.com/anduril.tasks.v2.Investigate': {
-    label: 'Investigate',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
   },
   'type.googleapis.com/anduril.tasks.v2.VisualId': {
-    label: 'Visual ID',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
   },
   'type.googleapis.com/anduril.tasks.v2.Map': {
-    label: 'Map (SAR)',
     fields: [
       { key: 'objective',  label: 'Objective',  type: 'objective',   required: true },
       { key: 'minNiirs',   label: 'Min NIIRS',  type: 'uint32_opt' },
@@ -670,50 +703,39 @@ const TASK_SCHEMAS = {
     ],
   },
   'type.googleapis.com/anduril.tasks.v2.Monitor': {
-    label: 'Monitor',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }],
   },
   'type.googleapis.com/anduril.tasks.v2.Shadow': {
-    label: 'Shadow',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
   },
   'type.googleapis.com/anduril.tasks.v2.Scan': {
-    label: 'Scan',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
   },
   'type.googleapis.com/anduril.tasks.v2.BattleDamageAssessment': {
-    label: 'Battle Damage Assessment',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
   },
   'type.googleapis.com/anduril.tasks.v2.Loiter': {
-    label: 'Loiter',
     fields: [{ key: 'objective', label: 'Objective', type: 'objective', required: true }, ...ISR],
   },
   'type.googleapis.com/anduril.tasks.v2.ImproveTrackQuality': {
-    label: 'Improve Track Quality',
     fields: [
       { key: 'objective',                label: 'Objective',              type: 'objective',   required: true },
       { key: 'terminationTrackQuality',  label: 'Target Track Quality',   type: 'uint32_opt' },
     ],
   },
   'type.googleapis.com/anduril.tasks.v2.AreaSearch': {
-    label: 'Area Search',
     fields: [{ key: 'objective', label: 'Search Area', type: 'objective', required: true }],
   },
   'type.googleapis.com/anduril.tasks.v2.VolumeSearch': {
-    label: 'Volume Search',
     fields: [{ key: 'objective', label: 'Search Volume', type: 'objective', required: true }],
   },
   'type.googleapis.com/anduril.tasks.v2.Marshal': {
-    label: 'Marshal',
     fields: [{ key: 'objective', label: 'Marshal Point', type: 'objective', required: true }],
   },
   'type.googleapis.com/anduril.tasks.v2.Transit': {
-    label: 'Transit',
     fields: [{ key: '_destination', label: 'Destination', type: 'objective', required: true }],
   },
   'type.googleapis.com/anduril.tasks.v2.Strike': {
-    label: 'Strike',
     fields: [
       { key: 'objective',                 label: 'Strike Target',          type: 'objective',   required: true },
       { key: 'parameters.runInBearing',   label: 'Run-In Bearing (°)',     type: 'float_opt',   group: 'Strike Parameters' },
@@ -721,22 +743,18 @@ const TASK_SCHEMAS = {
     ],
   },
   'type.googleapis.com/anduril.tasks.v2.Smack': {
-    label: 'Smack',
     fields: [
       { key: 'objective',                label: 'Strike Target',       type: 'objective',  required: true },
       { key: 'parameters.runInBearing',  label: 'Run-In Bearing (°)', type: 'float_opt',  group: 'Strike Parameters' },
     ],
   },
   'type.googleapis.com/anduril.tasks.v2.ReleasePayload': {
-    label: 'Release Payload',
     fields: [{ key: 'objective', label: 'Drop Point (optional)', type: 'objective' }],
   },
   'type.googleapis.com/anduril.tasks.v2.GimbalPoint': {
-    label: 'Gimbal Point',
     fields: [{ key: 'lookAt', label: 'Look At', type: 'objective', required: true }],
   },
   'type.googleapis.com/anduril.tasks.v2.GimbalZoom': {
-    label: 'Gimbal Zoom',
     fields: [
       { key: 'setHorizontalFov',   label: 'Horizontal FOV (°)',  type: 'float_opt' },
       { key: 'setMagnification',   label: 'Magnification',       type: 'float_opt' },
@@ -842,11 +860,11 @@ function buildTypePickerHtml(catalog) {
   }
   const items = catalog.map(def => {
     const url   = def.taskSpecificationUrl;
-    const label = TASK_SCHEMAS[url]?.label || url.split('/').pop();
-    const short = url.replace('type.googleapis.com/', '');
+    const label = getTaskDisplayName(url);
+    const desc  = getTaskDescription(url);
     return `<button class="task-type-btn" onclick="selectTaskType('${escapeHtml(url)}')">
-      <div>${escapeHtml(label)}</div>
-      <div class="task-type-url">${escapeHtml(short)}</div>
+      <div class="task-type-name">${escapeHtml(label)}</div>
+      ${desc ? `<div class="task-type-desc">${escapeHtml(desc)}</div>` : ''}
     </button>`;
   }).join('');
   return `<div class="wizard-type-list">${items}</div>`;
@@ -1265,8 +1283,9 @@ async function ensureTasksLoaded() {
 
   if (!taskStreamActive) connectTaskStream();
 
-  // Re-render tasks tab if it's currently visible
+  // Re-render tasks tab if it's currently visible, or refresh panel badges
   if (selectedEntityId && currentDetailTab === 'tasks') renderDetailTabContent();
+  else if (!selectedEntityId) renderPanel();
 }
 
 // -------------------------------------------------------------------------
@@ -1334,6 +1353,24 @@ function handleTaskSseBlock(block) {
   if (selectedEntityId && currentDetailTab === 'tasks') {
     if (getTaskAssigneeEntityId(task) === selectedEntityId) {
       renderDetailTabContent();
+    }
+  }
+
+  // Update the task badge on the entity card in the list panel
+  if (!selectedEntityId) {
+    const assigneeId = getTaskAssigneeEntityId(task);
+    if (assigneeId) {
+      const card = document.querySelector(`.entity-card[data-entity-id="${CSS.escape(assigneeId)}"]`);
+      if (card) {
+        const taskBadgeEl = card.querySelector('.card-task-badge');
+        const verb = getExecutingTaskVerb(assigneeId);
+        if (verb) {
+          taskBadgeEl.textContent = verb;
+          taskBadgeEl.hidden = false;
+        } else {
+          taskBadgeEl.hidden = true;
+        }
+      }
     }
   }
 }
@@ -1404,7 +1441,7 @@ function renderPanel() {
         card = document.createElement('div');
         card.className = 'entity-card';
         card.dataset.entityId = id;
-        card.innerHTML = `<div class="card-name"></div><div class="card-meta"><div class="card-location"></div><div class="card-updated"></div></div>`;
+        card.innerHTML = `<div class="card-header"><div class="card-name"></div><div class="card-task-badge" hidden></div></div><div class="card-meta"><div class="card-location"></div><div class="card-updated"></div></div>`;
         card.addEventListener('click', () => selectEntity(id));
       }
       card.classList.toggle('no-location', !latlng);
@@ -1414,6 +1451,14 @@ function renderPanel() {
       locEl.textContent = coordStr || 'No location';
       locEl.classList.toggle('missing', !coordStr);
       card.querySelector('.card-updated').textContent = `Updated ${relativeTime(lastUpdated)}`;
+      const taskBadgeEl = card.querySelector('.card-task-badge');
+      const verb = getExecutingTaskVerb(id);
+      if (verb) {
+        taskBadgeEl.textContent = verb;
+        taskBadgeEl.hidden = false;
+      } else {
+        taskBadgeEl.hidden = true;
+      }
       cardsEl.appendChild(card);
     }
     fragment.appendChild(cardsEl);
@@ -1650,3 +1695,5 @@ async function serverToolDeleteAllTasks() {
 }
 
 connectStream();
+loadTaskTypeConfig().then(() => { if (!selectedEntityId) renderPanel(); });
+ensureTasksLoaded();

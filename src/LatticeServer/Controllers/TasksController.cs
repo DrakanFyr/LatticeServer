@@ -77,14 +77,13 @@ public class TasksController : ControllerBase
             },
         };
 
-        // Parse specification
+        // Parse specification. The specific task types (Investigate, VisualId, etc.) are not compiled
+        // as protos in this project, so we cannot use ProtobufJsonConverter for the Any field —
+        // both parsing and serialization would throw "Type registry has no descriptor". Instead,
+        // store the raw spec JSON separately and inject it back when serializing responses.
         if (root.TryGetProperty("specification", out var spec))
         {
-            try
-            {
-                task.Specification = ProtobufJsonConverter.FromJson<Google.Protobuf.WellKnownTypes.Any>(spec.GetRawText());
-            }
-            catch { /* ignore invalid spec */ }
+            _store.StoreSpecJson(taskId, spec.GetRawText());
         }
 
         // Parse author
@@ -148,7 +147,7 @@ public class TasksController : ControllerBase
         _logger.LogInformation("REST CreateTask: created task {TaskId}", taskId);
         _store.UpsertTask(task, EventType.Created);
 
-        var result = ProtobufJsonRawResult(task);
+        var result = TaskJsonResult(task);
         result.StatusCode = 201;
         return result;
     }
@@ -171,7 +170,7 @@ public class TasksController : ControllerBase
         }
 
         _logger.LogInformation("REST GetTask: {TaskId}", taskId);
-        return ProtobufJsonRawResult(task);
+        return TaskJsonResult(task);
     }
 
     /// <summary>
@@ -262,7 +261,7 @@ public class TasksController : ControllerBase
         _logger.LogInformation("REST UpdateTaskStatus: task {TaskId} -> {Status}", taskId, updated.Status.Status);
         _store.UpsertTask(updated, EventType.Update);
 
-        return ProtobufJsonRawResult(updated);
+        return TaskJsonResult(updated);
     }
 
     /// <summary>
@@ -339,7 +338,7 @@ public class TasksController : ControllerBase
         _logger.LogInformation("REST CancelTask: task {TaskId} -> {Status}", taskId, updated.Status.Status);
         _store.UpsertTask(updated, EventType.Update);
 
-        return ProtobufJsonRawResult(updated);
+        return TaskJsonResult(updated);
     }
 
     /// <summary>
@@ -415,7 +414,9 @@ public class TasksController : ControllerBase
         }
 
         var tasks = filtered.ToList();
-        var jsonTasks = tasks.Select(t => JsonDocument.Parse(ProtobufJsonConverter.ToJson(t)).RootElement).ToList();
+        var jsonTasks = tasks
+            .Select(t => JsonDocument.Parse(TaskToJson(t)).RootElement)
+            .ToList();
 
         return Ok(new { tasks = jsonTasks });
     }
@@ -496,7 +497,8 @@ public class TasksController : ControllerBase
                     Task = task,
                     TaskView = TaskView.Manager,
                 };
-                await SseHelper.WriteProtobufEventAsync(Response, "PREEXISTING", evt, ct);
+                var json = TaskEventToJson(evt);
+                await SseHelper.WriteEventAsync(Response, "PREEXISTING", json, ct);
             }
         }
 
@@ -672,7 +674,7 @@ public class TasksController : ControllerBase
         }
     }
 
-    private static async System.Threading.Tasks.Task StreamTaskEvents(
+    private async System.Threading.Tasks.Task StreamTaskEvents(
         System.Threading.Channels.Channel<TaskEvent> subscription,
         HttpResponse response,
         CancellationToken ct)
@@ -685,7 +687,8 @@ public class TasksController : ControllerBase
                 EventType.Update => "UPDATE",
                 _ => "UPDATE",
             };
-            await SseHelper.WriteProtobufEventAsync(response, eventName, taskEvent, ct);
+            var json = TaskEventToJson(taskEvent);
+            await SseHelper.WriteEventAsync(response, eventName, json, ct);
         }
     }
 
@@ -780,8 +783,40 @@ public class TasksController : ControllerBase
         return await reader.ReadToEndAsync();
     }
 
-    private ContentResult ProtobufJsonRawResult(Google.Protobuf.IMessage message)
+    /// <summary>
+    /// Serializes a task to JSON and injects the raw spec JSON (if stored separately).
+    /// </summary>
+    private ContentResult TaskJsonResult(Anduril.Taskmanager.V1.Task task)
     {
-        return Content(ProtobufJsonConverter.ToJson(message), "application/json");
+        return Content(TaskToJson(task), "application/json");
+    }
+
+    private string TaskToJson(Anduril.Taskmanager.V1.Task task)
+    {
+        var json = ProtobufJsonConverter.ToJson(task);
+        var specJson = _store.GetSpecJson(task.Version?.TaskId ?? "");
+        return specJson != null ? InjectSpec(json, specJson) : json;
+    }
+
+    private string TaskEventToJson(TaskEvent taskEvent)
+    {
+        var json = ProtobufJsonConverter.ToJson(taskEvent);
+        var taskId = taskEvent.Task?.Version?.TaskId;
+        var specJson = taskId != null ? _store.GetSpecJson(taskId) : null;
+        if (specJson == null) return json;
+
+        // Inject spec into the nested task object within the event JSON.
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        var taskNode = root["task"]?.AsObject();
+        if (taskNode != null)
+            taskNode["specification"] = System.Text.Json.Nodes.JsonNode.Parse(specJson);
+        return root.ToJsonString();
+    }
+
+    private static string InjectSpec(string taskJson, string specJson)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(taskJson)!.AsObject();
+        root["specification"] = System.Text.Json.Nodes.JsonNode.Parse(specJson);
+        return root.ToJsonString();
     }
 }

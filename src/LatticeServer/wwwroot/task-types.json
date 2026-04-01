@@ -1,0 +1,110 @@
+[
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Investigate",
+    "displayName": "Investigate",
+    "description": "Command an asset to investigate a target entity or location.",
+    "executionTag": "Investigating"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.VisualId",
+    "displayName": "Visual ID",
+    "description": "Command an asset to visually identify a target.",
+    "executionTag": "Identifying"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Map",
+    "displayName": "Map (SAR)",
+    "description": "Command an asset to perform synthetic aperture radar mapping of an area.",
+    "executionTag": "Mapping"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Monitor",
+    "displayName": "Monitor",
+    "description": "Command an asset to continuously observe a target.",
+    "executionTag": "Monitoring"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Shadow",
+    "displayName": "Shadow",
+    "description": "Command an asset to follow and track a target entity.",
+    "executionTag": "Shadowing"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Scan",
+    "displayName": "Scan",
+    "description": "Command an asset to scan a target entity or area.",
+    "executionTag": "Scanning"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.BattleDamageAssessment",
+    "displayName": "Battle Damage Assessment",
+    "description": "Command an asset to assess damage inflicted on a target.",
+    "executionTag": "Assessing"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Loiter",
+    "displayName": "Loiter",
+    "description": "Command an asset to loiter over a location.",
+    "executionTag": "Loitering"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.ImproveTrackQuality",
+    "displayName": "Improve Track Quality",
+    "description": "Command an asset to improve the track quality of a target entity.",
+    "executionTag": "Improving Track Quality"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.AreaSearch",
+    "displayName": "Area Search",
+    "description": "Command an asset to search a defined geographic area for targets.",
+    "executionTag": "Searching Area"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.VolumeSearch",
+    "displayName": "Volume Search",
+    "description": "Command an asset to search a defined 3D volume for targets.",
+    "executionTag": "Searching Volume"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Marshal",
+    "displayName": "Marshal",
+    "description": "Command an asset to hold at a marshal point for offensive posturing.",
+    "executionTag": "Marshaling"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Transit",
+    "displayName": "Transit",
+    "description": "Command an asset to transit between locations via a planned route.",
+    "executionTag": "Transiting"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Strike",
+    "displayName": "Strike",
+    "description": "Command an asset to conduct a strike against a target.",
+    "executionTag": "Striking"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.Smack",
+    "displayName": "Smack",
+    "description": "Command an asset to engage a target using the SMACK brevity code.",
+    "executionTag": "Engaging"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.ReleasePayload",
+    "displayName": "Release Payload",
+    "description": "Command an asset to release its payload at a specified drop point.",
+    "executionTag": "Releasing Payload"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.GimbalPoint",
+    "displayName": "Gimbal Point",
+    "description": "Command an asset's gimbal to point at a target or location.",
+    "executionTag": "Pointing"
+  },
+  {
+    "type": "type.googleapis.com/anduril.tasks.v2.GimbalZoom",
+    "displayName": "Gimbal Zoom",
+    "description": "Command an asset's gimbal to set a specific zoom or field-of-view level.",
+    "executionTag": "Zooming"
+  }
+]
