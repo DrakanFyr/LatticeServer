@@ -77,12 +77,6 @@ public class TasksController : ControllerBase
             },
         };
 
-        // Parse displayName
-        if (root.TryGetProperty("displayName", out var dn))
-        {
-            task.DisplayName = dn.GetString() ?? "";
-        }
-
         // Parse specification
         if (root.TryGetProperty("specification", out var spec))
         {
@@ -424,6 +418,17 @@ public class TasksController : ControllerBase
         var jsonTasks = tasks.Select(t => JsonDocument.Parse(ProtobufJsonConverter.ToJson(t)).RootElement).ToList();
 
         return Ok(new { tasks = jsonTasks });
+    }
+
+    /// <summary>
+    /// DELETE /api/v1/tasks - Delete all tasks
+    /// </summary>
+    [HttpDelete("api/v1/tasks")]
+    public IActionResult DeleteAllTasks()
+    {
+        var count = _store.DeleteAllTasks();
+        _logger.LogInformation("REST DeleteAllTasks: deleted {Count} tasks", count);
+        return Ok(new { deletedCount = count });
     }
 
     /// <summary>

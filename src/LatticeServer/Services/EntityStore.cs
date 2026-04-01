@@ -163,6 +163,24 @@ public class EntityStore
     }
 
     /// <summary>
+    /// Deletes all entities. Returns the count deleted.
+    /// </summary>
+    public int DeleteAllEntities()
+    {
+        var ids = _entities.Keys.ToList();
+        var count = 0;
+        foreach (var id in ids)
+        {
+            if (_entities.TryRemove(id, out _))
+            {
+                _overrides.TryRemove(id, out _);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
     /// Deletes an entity by ID, broadcasting a Deleted event. Returns false if not found.
     /// </summary>
     public bool DeleteEntity(string entityId)

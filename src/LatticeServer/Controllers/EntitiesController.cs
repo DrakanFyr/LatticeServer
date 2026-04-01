@@ -182,6 +182,17 @@ public class EntitiesController : ControllerBase
     }
 
     /// <summary>
+    /// DELETE /api/v1/entities - Delete all entities
+    /// </summary>
+    [HttpDelete("api/v1/entities")]
+    public IActionResult DeleteAllEntities()
+    {
+        var count = _store.DeleteAllEntities();
+        _logger.LogInformation("REST DeleteAllEntities: deleted {Count} entities", count);
+        return Ok(new { deletedCount = count });
+    }
+
+    /// <summary>
     /// DELETE /api/v1/entities/{entityId} - Delete entity
     /// </summary>
     [HttpDelete("api/v1/entities/{entityId}")]

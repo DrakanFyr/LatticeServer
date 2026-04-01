@@ -51,6 +51,21 @@ public class TaskStore
     }
 
     /// <summary>
+    /// Removes all tasks. Returns the count removed.
+    /// </summary>
+    public int DeleteAllTasks()
+    {
+        var ids = _tasks.Keys.ToList();
+        var count = 0;
+        foreach (var id in ids)
+        {
+            if (_tasks.TryRemove(id, out _))
+                count++;
+        }
+        return count;
+    }
+
+    /// <summary>
     /// Removes all tasks assigned to the given entity ID. Returns the count removed.
     /// </summary>
     public int DeleteTasksByAssignee(string assigneeEntityId)

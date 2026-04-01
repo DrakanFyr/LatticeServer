@@ -21,6 +21,19 @@
         <div id="conn-dot" class="connecting"></div>
         <span id="conn-label">Connecting…</span>
       </div>
+      <div class="stat">
+        <button id="server-tools-btn" onclick="toggleServerToolsMenu(event)">
+          Server Tools
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="margin-left:4px">
+            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div id="server-tools-menu">
+          <div class="server-tools-label">Server Tools</div>
+          <button class="server-tools-item server-tools-danger" onclick="serverToolDeleteAllEntities()">Delete All Entities</button>
+          <button class="server-tools-item server-tools-danger" onclick="serverToolDeleteAllTasks()">Delete All Tasks</button>
+        </div>
+      </div>
     </div>
   </header>
 

@@ -33,6 +33,11 @@ const entityMap = new Map();
 let selectedEntityId  = null;
 let currentDetailTab  = 'entity';   // 'entity' | 'tasks'
 
+// Stable reference to #panel-empty: getElementById can't find it once it's
+// been detached from the DOM (e.g. after list.innerHTML = ''), so we cache
+// it here at load time.
+const panelEmptyEl = document.getElementById('panel-empty');
+
 // -------------------------------------------------------------------------
 // Task state  —  taskId -> Task  (highest definitionVersion kept)
 // -------------------------------------------------------------------------
@@ -1353,11 +1358,15 @@ function renderPanel() {
   if (selectedEntityId) return;
 
   const list    = document.getElementById('entity-list');
-  const empty   = document.getElementById('panel-empty');
   const countEl = document.getElementById('panel-count');
 
   countEl.textContent = entityMap.size;
-  if (entityMap.size === 0) { list.innerHTML = ''; list.appendChild(empty); return; }
+  if (entityMap.size === 0) {
+    list.innerHTML = '';
+    list.appendChild(panelEmptyEl);
+    document.getElementById('located-count').textContent = 0;
+    return;
+  }
 
   const sorted = [...entityMap.values()].sort(
     (a, b) => getDisplayName(a.entity).localeCompare(getDisplayName(b.entity))
@@ -1578,6 +1587,66 @@ document.addEventListener('click', (e) => {
     dropdown.classList.remove('open');
     btn?.classList.remove('open');
   }
+  // Close server-tools menu on outside click
+  const stMenu = document.getElementById('server-tools-menu');
+  const stBtn  = document.getElementById('server-tools-btn');
+  if (stMenu?.classList.contains('open') && !stMenu.contains(e.target) && !stBtn?.contains(e.target)) {
+    stMenu.classList.remove('open');
+  }
 });
+
+function toggleServerToolsMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('server-tools-menu');
+  const btn  = document.getElementById('server-tools-btn');
+  const isOpen = menu.classList.toggle('open');
+  if (isOpen) {
+    const rect = btn.getBoundingClientRect();
+    menu.style.top  = (rect.bottom + 6) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    menu.style.left = 'auto';
+  }
+}
+
+async function serverToolDeleteAllEntities() {
+  document.getElementById('server-tools-menu').classList.remove('open');
+  try {
+    const res = await fetch('/api/v1/entities', { method: 'DELETE' });
+    if (res.ok) {
+      const data = await res.json();
+      for (const { marker } of entityMap.values()) {
+        if (marker) clusterGroup.removeLayer(marker);
+      }
+      entityMap.clear();
+      closeEntityJsonModal();
+      clearSelection();
+      renderPanel();
+      console.info(`Deleted ${data.deletedCount} entity/entities`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      console.error('Delete all entities failed:', err.message || res.status);
+    }
+  } catch (err) {
+    console.error('Delete all entities request failed:', err);
+  }
+}
+
+async function serverToolDeleteAllTasks() {
+  document.getElementById('server-tools-menu').classList.remove('open');
+  try {
+    const res = await fetch('/api/v1/tasks', { method: 'DELETE' });
+    if (res.ok) {
+      const data = await res.json();
+      taskCache.clear();
+      if (currentDetailTab === 'tasks') renderDetailTabContent();
+      console.info(`Deleted ${data.deletedCount} task(s)`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      console.error('Delete all tasks failed:', err.message || res.status);
+    }
+  } catch (err) {
+    console.error('Delete all tasks request failed:', err);
+  }
+}
 
 connectStream();

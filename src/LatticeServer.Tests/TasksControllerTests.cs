@@ -51,12 +51,11 @@ public class TasksControllerTests : IClassFixture<WebApplicationFactory<Program>
     /// Helper to create a task via the REST API and return the response body as a Task proto.
     /// </summary>
     private async Task<(HttpResponseMessage Response, Anduril.Taskmanager.V1.Task? Task)> CreateTaskViaApi(
-        HttpClient client, string? taskId = null, string? description = null, string? displayName = null)
+        HttpClient client, string? taskId = null, string? description = null)
     {
         var props = new List<string>();
         if (taskId != null) props.Add($"\"taskId\": \"{taskId}\"");
         if (description != null) props.Add($"\"description\": \"{description}\"");
-        if (displayName != null) props.Add($"\"displayName\": \"{displayName}\"");
 
         var json = "{" + string.Join(", ", props) + "}";
         var response = await client.PostAsync("/api/v1/tasks", JsonContent(json));
@@ -213,18 +212,6 @@ public class TasksControllerTests : IClassFixture<WebApplicationFactory<Program>
 
         Assert.NotNull(task);
         Assert.Equal("My task description", task.Description);
-    }
-
-    [Fact]
-    public async System.Threading.Tasks.Task CreateTask_WithDisplayName_ParsesDisplayName()
-    {
-        // Doc: TaskCreation has "displayName" field
-        var (client, _) = CreateIsolatedClient();
-
-        var (_, task) = await CreateTaskViaApi(client, taskId: "dn-test-01", displayName: "My Display Name");
-
-        Assert.NotNull(task);
-        Assert.Equal("My Display Name", task.DisplayName);
     }
 
     [Fact]
