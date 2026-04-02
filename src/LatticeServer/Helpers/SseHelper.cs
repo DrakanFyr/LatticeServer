@@ -18,9 +18,9 @@ public static class SseHelper
     public static async Task WriteEventAsync(HttpResponse response, string eventType, string data, CancellationToken ct)
     {
         var sb = new StringBuilder();
-        sb.Append("event: ").AppendLine(eventType);
-        sb.Append("data: ").AppendLine(data);
-        sb.AppendLine();
+        sb.Append("event: ").Append(eventType).Append('\n');
+        sb.Append("data: ").Append(data).Append('\n');
+        sb.Append('\n');
 
         await response.WriteAsync(sb.ToString(), ct);
         await response.Body.FlushAsync(ct);
