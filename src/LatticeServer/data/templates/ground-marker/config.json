@@ -1,0 +1,9 @@
+{
+  "id": "ground-marker",
+  "defaultLocation": {
+    "latitudeDegrees": 47.6139891,
+    "longitudeDegrees": -122.1947269,
+    "altitudeHaeMeters": 0.0
+  },
+  "tickIntervalMs": 5000
+}

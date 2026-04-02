@@ -1,0 +1,25 @@
+{
+  "entityId": "<new_uuid>",
+  "isLive": true,
+  "expiryTime": "<now+300s>",
+  "aliases": { "name": "Ground Marker <unique_number>" },
+  "location": {
+    "position": {
+      "latitudeDegrees": 47.6139891,
+      "longitudeDegrees": -122.1947269,
+      "altitudeHaeMeters": 0.0
+    }
+  },
+  "milView": {
+    "disposition": "DISPOSITION_FRIENDLY",
+    "environment": "ENVIRONMENT_LAND"
+  },
+  "ontology": {
+    "platformType": "PLATFORM_TYPE_UNKNOWN"
+  },
+  "provenance": {
+    "integrationName": "LatticeServer-Template",
+    "dataType": "Simulation",
+    "sourceUpdateTime": "<now>"
+  }
+}

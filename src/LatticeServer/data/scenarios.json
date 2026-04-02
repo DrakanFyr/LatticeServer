@@ -1,0 +1,20 @@
+{
+  "activeScenario": "default",
+  "scenarios": {
+    "default": {
+      "name": "Default",
+      "description": "One simulated UAV (taskable) and one ground marker (non-taskable).",
+      "entities": [
+        {
+          "templateId": "simulated-uav",
+          "nameOverride": "Alpha-1",
+          "latitudeDegrees": 47.6147980,
+          "longitudeDegrees": -122.1949701
+        },
+        {
+          "templateId": "ground-marker"
+        }
+      ]
+    }
+  }
+}

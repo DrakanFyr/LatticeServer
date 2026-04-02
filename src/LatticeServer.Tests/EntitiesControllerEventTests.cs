@@ -5,6 +5,7 @@ using Anduril.Entitymanager.V1;
 using LatticeServer.Helpers;
 using LatticeServer.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LatticeServer.Tests;
@@ -26,6 +27,14 @@ public class EntitiesControllerEventTests : IClassFixture<WebApplicationFactory<
         var store = new EntityStore();
         var client = _factory.WithWebHostBuilder(builder =>
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    // Disable scenario auto-spawn so it doesn't seed the isolated store
+                    ["ScenarioConfigPath"] = ""
+                });
+            });
             builder.ConfigureServices(services =>
             {
                 services.AddSingleton(store);

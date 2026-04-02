@@ -18,5 +18,8 @@
     <Protobuf Update="../../LatticeSDK/protos/anduril/taskmanager/v1/task_manager_api.pub.proto" GrpcServices="Server" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\LatticeSDK.Templates\LatticeSDK.Templates.csproj" />
+  </ItemGroup>
 
 </Project>

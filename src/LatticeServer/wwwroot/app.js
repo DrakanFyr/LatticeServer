@@ -10,6 +10,20 @@ const clusterGroup = L.markerClusterGroup({ chunkedLoading: true });
 map.addLayer(clusterGroup);
 
 // -------------------------------------------------------------------------
+// Render scheduler — coalesces rapid SSE updates into one DOM pass per frame
+// -------------------------------------------------------------------------
+let renderRafId = null;
+
+function scheduleRender() {
+  if (renderRafId !== null) return;
+  renderRafId = requestAnimationFrame(() => {
+    renderRafId = null;
+    if (selectedEntityId) renderDetailView();
+    else renderPanel();
+  });
+}
+
+// -------------------------------------------------------------------------
 // Auto-fit: zoom to show all entities on initial load
 // -------------------------------------------------------------------------
 let hasAutoFitted = false;
@@ -259,10 +273,10 @@ function buildEntityTabHtml(entity, lastUpdated) {
   const latlng = getLatLng(entity);
   const pos    = entity?.location?.position;
   const locRows = [];
-  if (latlng)                            locRows.push(detailRow('Coordinates', formatCoords(latlng)));
-  if (pos?.altitudeHaeMeters != null)    locRows.push(detailRow('Altitude (HAE)', `${Number(pos.altitudeHaeMeters).toFixed(1)} m`, true));
-  if (pos?.altitudeAglMeters != null)    locRows.push(detailRow('Altitude (AGL)', `${Number(pos.altitudeAglMeters).toFixed(1)} m`, true));
-  if (entity?.location?.speedMps != null) locRows.push(detailRow('Speed', `${Number(entity.location.speedMps).toFixed(1)} m/s`, true));
+  if (latlng)                            locRows.push(detailRow('Coordinates', formatCoords(latlng), true, 'coords'));
+  if (pos?.altitudeHaeMeters != null)    locRows.push(detailRow('Altitude (HAE)', `${Number(pos.altitudeHaeMeters).toFixed(1)} m`, true, 'alt-hae'));
+  if (pos?.altitudeAglMeters != null)    locRows.push(detailRow('Altitude (AGL)', `${Number(pos.altitudeAglMeters).toFixed(1)} m`, true, 'alt-agl'));
+  if (entity?.location?.speedMps != null) locRows.push(detailRow('Speed', `${Number(entity.location.speedMps).toFixed(1)} m/s`, true, 'speed'));
   if (locRows.length) parts.push(detailSection('Location', locRows));
 
   const milView  = entity?.milView;
@@ -296,7 +310,7 @@ function buildEntityTabHtml(entity, lastUpdated) {
   if (entity?.createdTime)  lcRows.push(detailRow('Created', formatTimestamp(entity.createdTime), false));
   if (entity?.noExpiry)     lcRows.push(detailRow('Expiry', 'No expiry', false));
   else if (entity?.expiryTime) lcRows.push(detailRow('Expires', formatTimestamp(entity.expiryTime), false));
-  lcRows.push(detailRow('Last seen', relativeTime(lastUpdated), false));
+  lcRows.push(detailRow('Last seen', relativeTime(lastUpdated), false, 'last-seen'));
   parts.push(detailSection('Lifecycle', lcRows));
 
   const catalog = entity?.taskCatalog?.taskDefinitions || [];
@@ -328,9 +342,10 @@ function buildEntityTabHtml(entity, lastUpdated) {
 function detailSection(title, rows) {
   return `<div class="detail-section"><div class="detail-section-title">${escapeHtml(title)}</div>${rows.join('')}</div>`;
 }
-function detailRow(label, value, mono = true) {
+function detailRow(label, value, mono = true, fieldKey = null) {
   if (value == null || value === '') return '';
-  return `<div class="detail-row"><span class="detail-label">${escapeHtml(label)}</span><span class="detail-value${mono?'':' plain'}">${escapeHtml(String(value))}</span></div>`;
+  const dataAttr = fieldKey ? ` data-field="${fieldKey}"` : '';
+  return `<div class="detail-row"><span class="detail-label">${escapeHtml(label)}</span><span class="detail-value${mono?'':' plain'}"${dataAttr}>${escapeHtml(String(value))}</span></div>`;
 }
 function detailRowDisposition(disp) {
   const cls = { 'Friendly':'tag-friendly','Assumed Friendly':'tag-friendly','Hostile':'tag-hostile','Suspicious':'tag-suspicious','Neutral':'tag-neutral' }[disp] || 'tag-unknown';
@@ -1391,6 +1406,99 @@ function getGroupKey(entity) {
   return 'other';
 }
 
+// -------------------------------------------------------------------------
+// Surgical patch helpers — update only changed DOM nodes in place
+// -------------------------------------------------------------------------
+
+// Update a single entity card's dynamic fields without rebuilding it.
+// Returns false if the card isn't in the DOM or needs a structural change
+// (e.g. moved to a different group), so the caller can fall back to a full
+// renderPanel().
+function patchCard(id) {
+  const card = document.querySelector(`.entity-card[data-entity-id="${id}"]`);
+  if (!card) return false;
+
+  const entry = entityMap.get(id);
+  if (!entry) return false;
+
+  const { entity, lastUpdated } = entry;
+  const latlng   = getLatLng(entity);
+  const coordStr = formatCoords(latlng);
+
+  // Name — also guards against a rename causing a re-sort that would need
+  // a full render; if it changed we let renderPanel() handle ordering.
+  const nameEl = card.querySelector('.card-name');
+  const newName = getDisplayName(entity);
+  if (nameEl.textContent !== newName) return false;
+
+  // Location
+  const locEl = card.querySelector('.card-location');
+  const newLoc = coordStr || 'No location';
+  if (locEl.textContent !== newLoc) {
+    locEl.textContent = newLoc;
+    locEl.classList.toggle('missing', !coordStr);
+    card.classList.toggle('no-location', !latlng);
+  }
+
+  // Timestamp
+  card.querySelector('.card-updated').textContent = `Updated ${relativeTime(lastUpdated)}`;
+
+  // Task badge
+  const taskBadgeEl = card.querySelector('.card-task-badge');
+  const verb = getExecutingTaskVerb(id);
+  if (verb) {
+    taskBadgeEl.textContent = verb;
+    taskBadgeEl.hidden = false;
+  } else {
+    taskBadgeEl.hidden = true;
+  }
+
+  return true;
+}
+
+// Update only the volatile fields in the entity detail tab without
+// rebuilding innerHTML.  Returns false if a structural change is needed
+// (a field appeared or disappeared), so the caller falls back to a full
+// renderDetailTabContent().
+function patchDetailEntityTab(entry) {
+  const content = document.getElementById('detail-tab-content');
+  if (!content) return false;
+
+  const { entity, lastUpdated } = entry;
+
+  // Hero row
+  const heroName = document.getElementById('detail-hero-name');
+  if (heroName) heroName.textContent = getDisplayName(entity);
+
+  const latlng = getLatLng(entity);
+  const pos    = entity?.location?.position;
+
+  // Helper: find a [data-field] span, update its text.
+  // Returns false if the field's presence has changed (was present, now
+  // absent, or vice-versa) — that means we need a full rebuild.
+  function patchField(key, newValue) {
+    const el = content.querySelector(`[data-field="${key}"]`);
+    if (el && (newValue == null || newValue === '')) return false; // disappeared
+    if (!el && newValue != null && newValue !== '')  return false; // appeared
+    if (el) el.textContent = escapeHtml(String(newValue));
+    return true;
+  }
+
+  const coordStr  = formatCoords(latlng);
+  const altHae    = pos?.altitudeHaeMeters != null ? `${Number(pos.altitudeHaeMeters).toFixed(1)} m` : null;
+  const altAgl    = pos?.altitudeAglMeters != null ? `${Number(pos.altitudeAglMeters).toFixed(1)} m` : null;
+  const speed     = entity?.location?.speedMps  != null ? `${Number(entity.location.speedMps).toFixed(1)} m/s` : null;
+  const lastSeen  = relativeTime(lastUpdated);
+
+  if (!patchField('coords',   coordStr)) return false;
+  if (!patchField('alt-hae',  altHae))   return false;
+  if (!patchField('alt-agl',  altAgl))   return false;
+  if (!patchField('speed',    speed))    return false;
+  if (!patchField('last-seen', lastSeen)) return false;
+
+  return true;
+}
+
 function renderPanel() {
   if (selectedEntityId) return;
 
@@ -1496,6 +1604,7 @@ function upsertEntity(entity, eventTime) {
   const id = entity.entityId;
   if (!id) return;
 
+  const isNew = !entityMap.has(id);
   const existing = entityMap.get(id) || { entity: null, marker: null, lastUpdated: null };
   existing.entity = entity;
   existing.lastUpdated = eventTime || new Date();
@@ -1503,10 +1612,8 @@ function upsertEntity(entity, eventTime) {
   const latlng = getLatLng(entity);
   if (latlng) {
     if (existing.marker) {
-      clusterGroup.removeLayer(existing.marker);
       existing.marker.setLatLng(latlng);
       existing.marker.setIcon(makeMarkerIcon(id === selectedEntityId));
-      clusterGroup.addLayer(existing.marker);
     } else {
       const marker = L.marker(latlng, { icon: makeMarkerIcon(id === selectedEntityId) });
       marker.on('click', (e) => {
@@ -1541,8 +1648,21 @@ function upsertEntity(entity, eventTime) {
     );
     if (usedAsObjective) updateObjectiveMarkers();
   }
-  if (selectedEntityId === id) renderDetailView();
-  else renderPanel();
+
+  // For new entities (or structural changes) we need a full render.
+  // For existing entities, try surgical in-place patches first; fall back
+  // to a full scheduled render only if the patch detects a structural change.
+  if (isNew) {
+    scheduleRender();
+  } else if (selectedEntityId === id) {
+    if (currentDetailTab === 'entity' && !taskWizardActive) {
+      const dropdownOpen = document.getElementById('task-entity-dropdown')?.classList.contains('open');
+      if (!patchDetailEntityTab(existing) && !dropdownOpen) renderDetailTabContent();
+    }
+    // Tasks/dev tabs don't auto-update on entity ticks; no action needed.
+  } else {
+    if (!patchCard(id)) scheduleRender();
+  }
 }
 
 function removeEntity(entity) {
@@ -1553,7 +1673,7 @@ function removeEntity(entity) {
   entityMap.delete(id);
   if (jsonModalEntityId === id) closeEntityJsonModal();
   if (selectedEntityId === id) clearSelection();
-  else renderPanel();
+  else scheduleRender();
 }
 
 // -------------------------------------------------------------------------

@@ -89,3 +89,4 @@ publish/
 
 # dotnet tool manifest cache
 .dotnet/
+*.pdb

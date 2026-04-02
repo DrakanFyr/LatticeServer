@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>behavior</AssemblyName>
+    <!-- Override these via command line: dotnet build -p:TemplateId=my-template -p:TemplatesDir=../templates -->
+    <TemplateId>simulated-uav</TemplateId>
+    <TemplatesDir>$(MSBuildThisFileDirectory)..\src\LatticeServer\data\templates</TemplatesDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LatticeSDK.Templates\LatticeSDK.Templates.csproj" />
+  </ItemGroup>
+
+  <!-- Copy behavior.dll, behavior.pdb, entity.json, config.json into the template folder on build -->
+  <Target Name="DeployTemplate" AfterTargets="Build">
+    <PropertyGroup>
+      <_TemplateDir>$(TemplatesDir)\$(TemplateId)</_TemplateDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(_TemplateDir)" />
+    <Copy SourceFiles="$(OutputPath)behavior.dll" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(OutputPath)behavior.pdb" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" Condition="Exists('$(OutputPath)behavior.pdb')" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)entity.json" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)config.json" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" />
+    <Message Text="Deployed template '$(TemplateId)' to $(_TemplateDir)" Importance="high" />
+  </Target>
+
+</Project>

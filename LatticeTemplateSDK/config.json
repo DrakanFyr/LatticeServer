@@ -1,0 +1,13 @@
+{
+  "id": "simulated-uav",
+  "defaultLocation": {
+    "latitudeDegrees": 47.6147980,
+    "longitudeDegrees": -122.1949701,
+    "altitudeHaeMeters": 150.0
+  },
+  "tickIntervalMs": 100,
+  "custom": {
+    "speedMps": 15.0,
+    "headingDegrees": 90.0
+  }
+}

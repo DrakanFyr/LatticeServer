@@ -23,6 +23,9 @@ builder.Services.AddControllers()
 builder.Services.AddSingleton<EntityStore>();
 builder.Services.AddSingleton<TaskStore>();
 builder.Services.AddSingleton<ObjectStore>();
+builder.Services.AddSingleton<TemplateRegistry>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TemplateRegistry>());
+builder.Services.AddSingleton<SpawnedEntityManager>();
 builder.Services.AddHostedService<ScenarioService>();
 
 builder.WebHost.UseShutdownTimeout(TimeSpan.FromSeconds(2));

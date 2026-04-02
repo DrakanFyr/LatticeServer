@@ -1,40 +1,44 @@
 using System.Text.Json;
-using Anduril.Entitymanager.V1;
-using Anduril.Tasks.V2;
-using Google.Protobuf.WellKnownTypes;
 using LatticeServer.Models;
 
 namespace LatticeServer.Services;
 
 /// <summary>
-/// Background service that reads a scenario config file and auto-spawns the specified entities,
-/// keeping their expiry_time and provenance.source_update_time fresh on a configurable interval.
-/// If an entity is deleted externally it will no longer be refreshed.
+/// Background service that reads a scenario config file and spawns the referenced templates.
+/// Entity lifecycle (refresh, expiry) is delegated to <see cref="SpawnedEntityManager"/>.
 /// </summary>
 public class ScenarioService : BackgroundService
 {
     private readonly ILogger<ScenarioService> _logger;
-    private readonly EntityStore _entityStore;
+    private readonly SpawnedEntityManager _spawnedEntityManager;
+    private readonly TemplateRegistry _templateRegistry;
     private readonly IConfiguration _configuration;
 
     public ScenarioService(
         ILogger<ScenarioService> logger,
-        EntityStore entityStore,
+        SpawnedEntityManager spawnedEntityManager,
+        TemplateRegistry templateRegistry,
         IConfiguration configuration)
     {
         _logger = logger;
-        _entityStore = entityStore;
+        _spawnedEntityManager = spawnedEntityManager;
+        _templateRegistry = templateRegistry;
         _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var configPath = _configuration["ScenarioConfigPath"];
-        if (string.IsNullOrEmpty(configPath))
+        var dataDir = _configuration["DataDirectory"] ?? ".";
+        var rawPath = _configuration["ScenarioConfigPath"];
+        if (string.IsNullOrEmpty(rawPath))
         {
             _logger.LogInformation("ScenarioConfigPath not configured; scenario auto-spawn disabled.");
             return;
         }
+
+        var configPath = Path.IsPathRooted(rawPath)
+            ? rawPath
+            : Path.GetFullPath(Path.Combine(dataDir, rawPath));
 
         if (!File.Exists(configPath))
         {
@@ -64,162 +68,61 @@ public class ScenarioService : BackgroundService
         }
 
         _logger.LogInformation(
-            "Scenario '{Name}': spawning {Count} entities.",
+            "Scenario '{Name}': spawning {Count} template references.",
             scenario.Name, scenario.Entities.Count);
 
-        // Per-entity state: has it been published, and has it been deleted externally?
-        var published = new HashSet<string>();
-        var deleted = new HashSet<string>();
-        var nextRefresh = new Dictionary<string, DateTime>();
+        // Wait for TemplateRegistry to finish its initial directory scan
+        await _templateRegistry.InitialScanComplete.WaitAsync(stoppingToken);
 
-        foreach (var entity in scenario.Entities)
+        var spawnedEntityIds = new List<string>();
+
+        foreach (var entityRef in scenario.Entities)
         {
-            if (string.IsNullOrEmpty(entity.EntityId))
+            if (string.IsNullOrEmpty(entityRef.TemplateId))
             {
-                _logger.LogWarning("Skipping scenario entity with no entityId.");
+                _logger.LogWarning("Skipping scenario entity ref with no templateId.");
                 continue;
             }
-            nextRefresh[entity.EntityId] = DateTime.MinValue; // publish immediately
-        }
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            var now = DateTime.UtcNow;
-
-            foreach (var cfg in scenario.Entities)
+            if (!_templateRegistry.TryGet(entityRef.TemplateId, out var template))
             {
-                if (string.IsNullOrEmpty(cfg.EntityId)) continue;
-                if (deleted.Contains(cfg.EntityId)) continue;
-
-                if (!nextRefresh.TryGetValue(cfg.EntityId, out var due) || now < due) continue;
-
-                // If published before but missing from the store → deleted externally
-                if (published.Contains(cfg.EntityId) && _entityStore.GetEntity(cfg.EntityId) == null)
-                {
-                    _logger.LogInformation(
-                        "Scenario entity '{Id}' ({Name}) was removed externally; stopping refresh.",
-                        cfg.EntityId, cfg.Name);
-                    deleted.Add(cfg.EntityId);
-                    continue;
-                }
-
-                try
-                {
-                    _entityStore.PublishEntity(BuildEntity(cfg));
-                    if (published.Add(cfg.EntityId))
-                        _logger.LogInformation("Spawned scenario entity '{Id}' ({Name}).", cfg.EntityId, cfg.Name);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to publish scenario entity '{Id}'.", cfg.EntityId);
-                }
-
-                nextRefresh[cfg.EntityId] = now.AddSeconds(cfg.RefreshIntervalSeconds);
+                _logger.LogWarning(
+                    "Scenario entity ref: template '{TemplateId}' not found in registry. Skipping.",
+                    entityRef.TemplateId);
+                continue;
             }
 
-            await Task.Delay(500, stoppingToken);
-        }
-    }
-
-    private static Entity BuildEntity(EntitySpawnConfig cfg)
-    {
-        var now = DateTime.UtcNow;
-
-        var entity = new Entity
-        {
-            EntityId = cfg.EntityId,
-            IsLive = true,
-            ExpiryTime = Timestamp.FromDateTime(now.AddSeconds(cfg.ExpirySeconds)),
-            Aliases = new Aliases { Name = cfg.Name },
-            Location = BuildLocation(cfg),
-            MilView = new MilView
+            try
             {
-                Disposition = ParseDisposition(cfg.Disposition),
-                Environment = ParseEnvironment(cfg.Environment),
-            },
-            Provenance = new Provenance
-            {
-                IntegrationName = cfg.IntegrationName,
-                DataType = cfg.DataType,
-                SourceUpdateTime = Timestamp.FromDateTime(now),
-            },
-            Ontology = new Ontology
-            {
-                Template = ParseTemplate(cfg.Template),
-                PlatformType = cfg.PlatformType ?? "",
-            },
-        };
+                var options = new SpawnOptions
+                {
+                    NameOverride = entityRef.NameOverride,
+                    LatitudeDegrees = entityRef.LatitudeDegrees,
+                    LongitudeDegrees = entityRef.LongitudeDegrees,
+                    AltitudeHaeMeters = entityRef.AltitudeHaeMeters,
+                };
 
-        if (cfg.TaskSpecificationUrls.Count > 0)
-        {
-            entity.TaskCatalog = new TaskCatalog();
-            foreach (var url in cfg.TaskSpecificationUrls)
-                entity.TaskCatalog.TaskDefinitions.Add(new TaskDefinition { TaskSpecificationUrl = url });
+                var entityId = _spawnedEntityManager.Spawn(template, options);
+                spawnedEntityIds.Add(entityId);
+                _logger.LogInformation(
+                    "Scenario spawned entity '{EntityId}' from template '{TemplateId}'.",
+                    entityId, entityRef.TemplateId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to spawn template '{TemplateId}' for scenario.", entityRef.TemplateId);
+            }
         }
 
-        return entity;
-    }
+        _logger.LogInformation("Scenario '{Name}' active with {Count} entities.", scenario.Name, spawnedEntityIds.Count);
 
-    private static Location BuildLocation(EntitySpawnConfig cfg)
-    {
-        var position = new Position
+        // Keep alive until shutdown
+        await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        // Despawn scenario entities on shutdown
+        foreach (var entityId in spawnedEntityIds)
         {
-            LatitudeDegrees = cfg.Latitude,
-            LongitudeDegrees = cfg.Longitude,
-        };
-
-        if (cfg.AltitudeHaeMeters.HasValue)
-            position.AltitudeHaeMeters = cfg.AltitudeHaeMeters.Value;
-
-        var location = new Location { Position = position };
-
-        if (cfg.SpeedMps.HasValue)
-            location.SpeedMps = cfg.SpeedMps.Value;
-
-        if (cfg.VelocityE.HasValue || cfg.VelocityN.HasValue || cfg.VelocityU.HasValue)
-        {
-            location.VelocityEnu = new Anduril.Type.ENU
-            {
-                E = cfg.VelocityE ?? 0,
-                N = cfg.VelocityN ?? 0,
-                U = cfg.VelocityU ?? 0,
-            };
+            _spawnedEntityManager.Despawn(entityId);
         }
-
-        return location;
     }
-
-    private static Anduril.Ontology.V1.Disposition ParseDisposition(string value) =>
-        value.ToLowerInvariant() switch
-        {
-            "friendly" => Anduril.Ontology.V1.Disposition.Friendly,
-            "hostile" => Anduril.Ontology.V1.Disposition.Hostile,
-            "suspicious" => Anduril.Ontology.V1.Disposition.Suspicious,
-            "assumedfriendly" or "assumed_friendly" => Anduril.Ontology.V1.Disposition.AssumedFriendly,
-            "neutral" => Anduril.Ontology.V1.Disposition.Neutral,
-            "pending" => Anduril.Ontology.V1.Disposition.Pending,
-            _ => Anduril.Ontology.V1.Disposition.Unknown,
-        };
-
-    private static Anduril.Ontology.V1.Environment ParseEnvironment(string value) =>
-        value.ToLowerInvariant() switch
-        {
-            "air" => Anduril.Ontology.V1.Environment.Air,
-            "surface" => Anduril.Ontology.V1.Environment.Surface,
-            "subsurface" or "sub_surface" => Anduril.Ontology.V1.Environment.SubSurface,
-            "land" => Anduril.Ontology.V1.Environment.Land,
-            "space" => Anduril.Ontology.V1.Environment.Space,
-            _ => Anduril.Ontology.V1.Environment.Unknown,
-        };
-
-    private static Template ParseTemplate(string value) =>
-        value.ToLowerInvariant() switch
-        {
-            "track" => Template.Track,
-            "asset" => Template.Asset,
-            "sensorpointofinterest" or "sensor_point_of_interest" => Template.SensorPointOfInterest,
-            "geo" => Template.Geo,
-            "signalofinterest" or "signal_of_interest" => Template.SignalOfInterest,
-            _ => Template.Invalid,
-        };
 }
