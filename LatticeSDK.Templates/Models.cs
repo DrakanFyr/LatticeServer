@@ -41,6 +41,8 @@ public enum TaskStatusCode
 public record TemplateConfig(
     SpawnLocation? DefaultLocation,
     int TickIntervalMs,
+    string? Category,
+    string? DisplayName,
     IReadOnlyDictionary<string, JsonElement> Custom);
 
 /// <summary>A lat/lon/alt coordinate used as a spawn origin or navigation target.</summary>

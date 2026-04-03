@@ -38,10 +38,19 @@ public class SimulatedUavBehavior : ITaskableEntity
         _speedMps = config.Custom.TryGetValue("speedMps", out var s) ? s.GetDouble() : 15.0;
         _headingDeg = config.Custom.TryGetValue("headingDegrees", out var h) ? h.GetDouble() : 90.0;
 
-        if (config.DefaultLocation != null)
+        // Use the actual spawned position (which may differ from DefaultLocation when the
+        // entity was placed via the map). Fall back to DefaultLocation if not yet published.
+        var spawnedPos = querier.TryGetPosition(entityId);
+        if (spawnedPos != null)
         {
-            _lat = config.DefaultLocation.LatitudeDegrees;
-            _lon = config.DefaultLocation.LongitudeDegrees;
+            _lat  = spawnedPos.LatitudeDegrees;
+            _lon  = spawnedPos.LongitudeDegrees;
+            _altM = spawnedPos.AltitudeHaeMeters ?? config.DefaultLocation?.AltitudeHaeMeters ?? 150.0;
+        }
+        else if (config.DefaultLocation != null)
+        {
+            _lat  = config.DefaultLocation.LatitudeDegrees;
+            _lon  = config.DefaultLocation.LongitudeDegrees;
             _altM = config.DefaultLocation.AltitudeHaeMeters ?? 150.0;
         }
     }

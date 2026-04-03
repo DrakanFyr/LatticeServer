@@ -26,7 +26,7 @@ public class TemplatesController : ControllerBase
     public IActionResult ListTemplates()
     {
         var items = _registry.GetAll()
-            .Select(t => new TemplateListItem(t.TemplateId, t.BehaviorType != null, t.Config.TickIntervalMs))
+            .Select(t => new TemplateListItem(t.TemplateId, t.BehaviorType != null, t.Config.TickIntervalMs, t.Config.Category, t.Config.DisplayName))
             .ToList();
         return Ok(items);
     }

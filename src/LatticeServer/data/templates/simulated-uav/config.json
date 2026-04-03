@@ -1,5 +1,7 @@
 {
   "id": "simulated-uav",
+  "displayName": "Simulated UAV",
+  "category": "UAV",
   "defaultLocation": {
     "latitudeDegrees": 47.6147980,
     "longitudeDegrees": -122.1949701,

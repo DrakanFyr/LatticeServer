@@ -213,6 +213,11 @@ public class TemplateRegistry : IHostedService, IDisposable
             }
         }
 
+        if (string.IsNullOrWhiteSpace(config.DisplayName))
+        {
+            _logger.LogWarning("Template '{Id}': no displayName set in config.json. The template ID will be shown in the UI.", templateId);
+        }
+
         // Load behavior DLL if present
         Type? behaviorType = null;
         AssemblyLoadContext? loadContext = null;
@@ -304,6 +309,18 @@ public class TemplateRegistry : IHostedService, IDisposable
             tickMs = Math.Max(32, tickEl.GetInt32());
         }
 
+        string? category = null;
+        if (root.TryGetProperty("category", out var categoryEl))
+        {
+            category = categoryEl.GetString();
+        }
+
+        string? displayName = null;
+        if (root.TryGetProperty("displayName", out var displayNameEl))
+        {
+            displayName = displayNameEl.GetString();
+        }
+
         var custom = new Dictionary<string, JsonElement>();
         if (root.TryGetProperty("custom", out var customEl) && customEl.ValueKind == JsonValueKind.Object)
         {
@@ -313,11 +330,11 @@ public class TemplateRegistry : IHostedService, IDisposable
             }
         }
 
-        return new LatticeSDK.Templates.TemplateConfig(defaultLocation, tickMs, custom);
+        return new LatticeSDK.Templates.TemplateConfig(defaultLocation, tickMs, category, displayName, custom);
     }
 
     private static LatticeSDK.Templates.TemplateConfig DefaultTemplateConfig() =>
-        new(DefaultLocation: null, TickIntervalMs: 1000,
+        new(DefaultLocation: null, TickIntervalMs: 1000, Category: null, DisplayName: null,
             Custom: new Dictionary<string, JsonElement>());
 }
 

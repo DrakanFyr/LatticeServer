@@ -604,3 +604,95 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   0%   { box-shadow: 0 0 0 0px  rgba(57,211,83,0.85), 0 2px 8px rgba(0,0,0,0.55); }
   100% { box-shadow: 0 0 0 16px rgba(57,211,83,0.0),  0 2px 8px rgba(0,0,0,0.55); }
 }
+
+/* ── Add Entity dropdown ── */
+#add-entity-btn {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #3fb950;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 8px;
+  transition: border-color 0.15s, color 0.15s;
+}
+#add-entity-btn:hover { border-color: #3fb950; color: #3fb950; }
+
+#add-entity-menu,
+#map-context-menu {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  min-width: 180px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+#add-entity-menu.open,
+#map-context-menu.open { display: block; }
+#add-entity-menu::-webkit-scrollbar,
+#map-context-menu::-webkit-scrollbar { width: 6px; }
+#add-entity-menu::-webkit-scrollbar-track,
+#map-context-menu::-webkit-scrollbar-track { background: transparent; }
+#add-entity-menu::-webkit-scrollbar-thumb,
+#map-context-menu::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+.add-entity-label {
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #484f58;
+}
+.ae-category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #e6edf3;
+  cursor: default;
+  margin: 1px 0;
+}
+.ae-category-row:hover,
+.ae-category-row.ae-active { background: #1f6feb; color: #fff; }
+.ae-flyout {
+  display: none;
+  position: fixed;
+  z-index: 1001;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  min-width: 160px;
+}
+.ae-flyout.open { display: block; }
+.add-entity-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  border: none;
+  background: none;
+  color: #e6edf3;
+  margin: 1px 0;
+}
+.add-entity-item:hover { background: #21262d; color: #3fb950; }
+.add-entity-divider {
+  border: none;
+  border-top: 1px solid #30363d;
+  margin: 4px 0;
+}

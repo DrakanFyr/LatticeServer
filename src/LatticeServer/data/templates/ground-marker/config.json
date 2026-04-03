@@ -1,5 +1,6 @@
 {
   "id": "ground-marker",
+  "displayName": "Ground Marker",
   "defaultLocation": {
     "latitudeDegrees": 47.6139891,
     "longitudeDegrees": -122.1947269,

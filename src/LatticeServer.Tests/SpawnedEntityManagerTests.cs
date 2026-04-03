@@ -42,7 +42,7 @@ public class SpawnedEntityManagerTests : IDisposable
             TemplateId: id,
             FolderPath: "/fake/path",
             RawEntityJson: rawEntityJson ?? MinimalEntityJson,
-            Config: config ?? new TemplateConfig(null, 1000, new Dictionary<string, JsonElement>()),
+            Config: config ?? new TemplateConfig(null, 1000, null, null, new Dictionary<string, JsonElement>()),
             BehaviorType: null,
             LoadContext: null);
 
@@ -107,6 +107,8 @@ public class SpawnedEntityManagerTests : IDisposable
         var config = new TemplateConfig(
             DefaultLocation: new SpawnLocation(55.0, 10.0, null),
             TickIntervalMs: 1000,
+            Category: null,
+            DisplayName: null,
             Custom: new Dictionary<string, JsonElement>());
 
         var entityId = _manager.Spawn(MakeTemplate(config: config), options: null);
@@ -122,6 +124,8 @@ public class SpawnedEntityManagerTests : IDisposable
         var config = new TemplateConfig(
             DefaultLocation: new SpawnLocation(55.0, 10.0, null),
             TickIntervalMs: 1000,
+            Category: null,
+            DisplayName: null,
             Custom: new Dictionary<string, JsonElement>());
         var options = new SpawnOptions { LatitudeDegrees = 1.0, LongitudeDegrees = 2.0 };
 

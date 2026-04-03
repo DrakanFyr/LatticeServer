@@ -1758,6 +1758,19 @@ document.addEventListener('click', (e) => {
   if (stMenu?.classList.contains('open') && !stMenu.contains(e.target) && !stBtn?.contains(e.target)) {
     stMenu.classList.remove('open');
   }
+  // Close add-entity menu on outside click
+  const aeMenu = document.getElementById('add-entity-menu');
+  const aeBtn  = document.getElementById('add-entity-btn');
+  const clickedFlyout = e.target.closest('.ae-flyout');
+  if (aeMenu?.classList.contains('open') && !aeMenu.contains(e.target) && !aeBtn?.contains(e.target) && !clickedFlyout) {
+    aeMenu.classList.remove('open');
+    closeAllFlyouts();
+  }
+  // Close map context menu on outside click
+  const ctxMenu = document.getElementById('map-context-menu');
+  if (ctxMenu?.classList.contains('open') && !ctxMenu.contains(e.target) && !clickedFlyout) {
+    closeMapContextMenu();
+  }
 });
 
 function toggleServerToolsMenu(e) {
@@ -1814,6 +1827,268 @@ async function serverToolDeleteAllTasks() {
   }
 }
 
+// -------------------------------------------------------------------------
+// Add Entity — template dropdown + map placement
+// -------------------------------------------------------------------------
+let entityTemplates = [];
+let spawnPickHandler = null;
+
+async function loadEntityTemplates() {
+  try {
+    const res = await fetch('/api/v1/templates');
+    if (!res.ok) { console.error('Failed to load templates:', res.status); return; }
+    entityTemplates = await res.json();
+    renderAddEntityMenu();
+  } catch (err) {
+    console.error('Failed to load templates:', err);
+  }
+}
+
+const CHEVRON_RIGHT = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true"><path d="M2.5 1.5L5.5 4L2.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// Returns { sortedCategories, categorized, uncategorized } with templates sorted alphabetically.
+function groupTemplatesByCategory() {
+  const categorized = new Map();
+  const uncategorized = [];
+  for (const t of entityTemplates) {
+    if (t.category) {
+      if (!categorized.has(t.category)) categorized.set(t.category, []);
+      categorized.get(t.category).push(t);
+    } else {
+      uncategorized.push(t);
+    }
+  }
+  const sortedCategories = [...categorized.keys()].sort((a, b) => a.localeCompare(b));
+  for (const cat of sortedCategories) {
+    categorized.get(cat).sort((a, b) => (a.displayName || a.templateId).localeCompare(b.displayName || b.templateId));
+  }
+  uncategorized.sort((a, b) => (a.displayName || a.templateId).localeCompare(b.displayName || b.templateId));
+  return { sortedCategories, categorized, uncategorized };
+}
+
+// Builds a list of <button> items for a flyout. actionFn is the JS function name to call onclick.
+function buildFlyoutItems(templates, actionFn) {
+  return templates.map(t => {
+    const name = t.displayName || t.templateId;
+    return `<button class="add-entity-item" onclick="${actionFn}('${escHtml(t.templateId)}','${escHtml(name)}')">${escHtml(name)}</button>`;
+  }).join('');
+}
+
+// Builds a category row with an expandable flyout.
+function buildCategoryRow(label, templates, actionFn) {
+  return `
+    <div class="ae-category-row"
+         onmouseenter="openCategoryFlyout(this)"
+         onmouseleave="scheduleFlyoutClose(this)">
+      <span>${escHtml(label)}</span>
+      ${CHEVRON_RIGHT}
+      <div class="ae-flyout"
+           onmouseenter="cancelFlyoutClose()"
+           onmouseleave="scheduleFlyoutClose(this.parentElement)">
+        ${buildFlyoutItems(templates, actionFn)}
+      </div>
+    </div>`;
+}
+
+// Builds the full category HTML (rows + optional uncategorized section) for a given actionFn.
+function buildEntityCategoryRows(actionFn) {
+  const { sortedCategories, categorized, uncategorized } = groupTemplatesByCategory();
+  let html = '';
+  for (const cat of sortedCategories) {
+    html += buildCategoryRow(cat, categorized.get(cat), actionFn);
+  }
+  if (uncategorized.length > 0) {
+    if (sortedCategories.length > 0) html += '<hr class="add-entity-divider">';
+    html += buildCategoryRow('Uncategorized', uncategorized, actionFn);
+  }
+  return html;
+}
+
+function renderAddEntityMenu() {
+  const menu = document.getElementById('add-entity-menu');
+  if (!menu) return;
+  menu.innerHTML = '<div class="add-entity-label">Add Entity</div>' + buildEntityCategoryRows('beginEntityPlacement');
+}
+
+let _flyoutCloseTimer = null;
+
+function openCategoryFlyout(rowEl) {
+  cancelFlyoutClose();
+  closeAllFlyouts();
+  const flyout = rowEl.querySelector('.ae-flyout');
+  if (!flyout) return;
+
+  // Measure flyout before committing position
+  flyout.style.visibility = 'hidden';
+  flyout.style.left = '-9999px';
+  flyout.style.top  = '-9999px';
+  flyout.classList.add('open');
+  const fw = flyout.offsetWidth;
+  const fh = flyout.offsetHeight;
+  flyout.style.visibility = '';
+
+  const rect = rowEl.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Flip left if opening right would overflow the viewport
+  const left = (rect.right + 4 + fw > vw)
+    ? rect.left - fw - 4
+    : rect.right + 4;
+
+  // Clamp vertically so the flyout doesn't overflow the bottom
+  const top = Math.min(rect.top, vh - fh - 4);
+
+  flyout.style.left = left + 'px';
+  flyout.style.top  = top  + 'px';
+  rowEl.classList.add('ae-active');
+}
+
+function closeAllFlyouts() {
+  document.querySelectorAll('.ae-flyout.open').forEach(f => {
+    f.classList.remove('open');
+    f.closest('.ae-category-row')?.classList.remove('ae-active');
+  });
+}
+
+function scheduleFlyoutClose(rowEl) {
+  clearTimeout(_flyoutCloseTimer);
+  _flyoutCloseTimer = setTimeout(() => {
+    rowEl.querySelector('.ae-flyout')?.classList.remove('open');
+    rowEl.classList.remove('ae-active');
+  }, 120);
+}
+
+function cancelFlyoutClose() {
+  clearTimeout(_flyoutCloseTimer);
+  _flyoutCloseTimer = null;
+}
+
+function toggleAddEntityMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('add-entity-menu');
+  const btn  = document.getElementById('add-entity-btn');
+  const isOpen = menu.classList.toggle('open');
+  if (isOpen) {
+    const rect = btn.getBoundingClientRect();
+    menu.style.top   = (rect.bottom + 6) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    menu.style.left  = 'auto';
+  } else {
+    closeAllFlyouts();
+  }
+}
+
+function beginEntityPlacement(templateId, displayName) {
+  document.getElementById('add-entity-menu').classList.remove('open');
+
+  if (spawnPickHandler) { map.off('click', spawnPickHandler); spawnPickHandler = null; }
+
+  const banner = document.getElementById('map-pick-banner');
+  if (banner) banner.textContent = `Click the map to place "${displayName}" · Esc to cancel`;
+  document.getElementById('map-wrapper').classList.add('picking');
+  banner?.classList.add('visible');
+
+  spawnPickHandler = async (e) => {
+    spawnPickHandler = null;
+    document.getElementById('map-wrapper').classList.remove('picking');
+    document.getElementById('map-pick-banner')?.classList.remove('visible');
+    resetBannerText();
+    await spawnEntityAtLocation(templateId, e.latlng.lat, e.latlng.lng);
+  };
+  map.once('click', spawnPickHandler);
+}
+
+function resetBannerText() {
+  const banner = document.getElementById('map-pick-banner');
+  if (banner) banner.textContent = 'Click an entity marker to select it, or click the map to place a point · Esc to cancel';
+}
+
+async function spawnEntityAtLocation(templateId, lat, lng) {
+  try {
+    const res = await fetch(`/api/v1/templates/${encodeURIComponent(templateId)}/spawn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ latitudeDegrees: lat, longitudeDegrees: lng }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      console.info(`Spawned entity '${data.entityId}' from template '${templateId}'`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      console.error('Spawn failed:', err.message || res.status);
+    }
+  } catch (err) {
+    console.error('Spawn request failed:', err);
+  }
+}
+
+// -------------------------------------------------------------------------
+// Map context menu — right-click to spawn entity at a location
+// -------------------------------------------------------------------------
+let mapContextLatLng = null;
+
+map.on('contextmenu', (e) => {
+  if (spawnPickHandler || mapPickField) return; // already in a placement mode
+  closeMapContextMenu();
+  closeAllFlyouts();
+  document.getElementById('add-entity-menu')?.classList.remove('open');
+  mapContextLatLng = e.latlng;
+  showMapContextMenu(e.originalEvent.clientX, e.originalEvent.clientY);
+});
+
+function showMapContextMenu(clientX, clientY) {
+  const menu = document.getElementById('map-context-menu');
+  if (!menu) return;
+  menu.innerHTML = '<div class="add-entity-label">Add Entity</div>' + buildEntityCategoryRows('spawnFromContextMenu');
+
+  // Position so the menu stays within the viewport
+  const vw = window.innerWidth, vh = window.innerHeight;
+  menu.style.left = 'auto'; menu.style.right = 'auto';
+  menu.style.top  = 'auto'; menu.style.bottom = 'auto';
+  // Temporarily show off-screen to measure size
+  menu.style.visibility = 'hidden';
+  menu.classList.add('open');
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.visibility = '';
+  menu.style.left = (clientX + mw > vw ? vw - mw - 4 : clientX) + 'px';
+  menu.style.top  = (clientY + mh > vh ? vh - mh - 4 : clientY) + 'px';
+}
+
+function closeMapContextMenu() {
+  const menu = document.getElementById('map-context-menu');
+  if (!menu) return;
+  menu.classList.remove('open');
+  closeAllFlyouts();
+  mapContextLatLng = null;
+}
+
+function spawnFromContextMenu(templateId, _displayName) {
+  const latlng = mapContextLatLng;
+  closeMapContextMenu();
+  if (!latlng) return;
+  spawnEntityAtLocation(templateId, latlng.lat, latlng.lng);
+}
+
+// Cancel placement on Escape (alongside existing escape handling)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (spawnPickHandler) {
+      map.off('click', spawnPickHandler);
+      spawnPickHandler = null;
+      document.getElementById('map-wrapper').classList.remove('picking');
+      document.getElementById('map-pick-banner')?.classList.remove('visible');
+      resetBannerText();
+    }
+    closeMapContextMenu();
+  }
+}, true);
+
+function escHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 connectStream();
 loadTaskTypeConfig().then(() => { if (!selectedEntityId) renderPanel(); });
 ensureTasksLoaded();
+loadEntityTemplates();

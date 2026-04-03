@@ -22,4 +22,10 @@
     <ProjectReference Include="..\..\LatticeSDK.Templates\LatticeSDK.Templates.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="data/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

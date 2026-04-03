@@ -3,7 +3,9 @@ namespace LatticeServer.Models;
 public record TemplateListItem(
     string TemplateId,
     bool IsTaskable,
-    int TickIntervalMs);
+    int TickIntervalMs,
+    string? Category,
+    string? DisplayName);
 
 public record SpawnedInstanceInfo(
     string EntityId,
