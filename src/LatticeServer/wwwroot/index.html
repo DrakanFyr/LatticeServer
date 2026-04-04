@@ -99,6 +99,45 @@
     </div>
   </div>
 
+  <!-- Paste JSON modal -->
+  <div id="paste-json-modal" onclick="handlePasteJsonModalBackdropClick(event)">
+    <div class="paste-json-box">
+      <div class="json-modal-header">
+        <span class="json-modal-title">Paste JSON</span>
+        <label class="paste-json-browse-btn">
+          Browse
+          <input type="file" id="paste-json-file-input" accept=".json,application/json" style="display:none" onchange="handlePasteJsonFileOpen(event)">
+        </label>
+        <button class="json-modal-close" onclick="closePasteJsonModal()">✕</button>
+      </div>
+      <div class="paste-json-editor-wrap">
+        <div class="paste-json-gutter" id="paste-json-gutter">1</div>
+        <div class="paste-json-code-container">
+          <div class="paste-json-highlight-layer" id="paste-json-highlight-layer" aria-hidden="true"></div>
+          <textarea id="paste-json-textarea" class="paste-json-textarea" spellcheck="false" autocomplete="off" placeholder="Paste entity JSON here…" oninput="onPasteJsonInput()" onscroll="syncPasteJsonGutterScroll()" onkeydown="handlePasteJsonKeyDown(event)"></textarea>
+        </div>
+      </div>
+      <div class="paste-json-error-bar" id="paste-json-error-bar"></div>
+      <div class="paste-json-footer">
+        <button class="paste-json-spawn-btn" id="paste-json-spawn-btn" onclick="beginPasteJsonSpawnPick()">Choose Spawn Location</button>
+        <button class="paste-json-gen-id-btn" onclick="generatePasteJsonEntityId()">Generate New Id</button>
+        <div class="paste-json-footer-right">
+          <label class="paste-json-keepalive-label">
+            <input type="checkbox" id="paste-json-keepalive">
+            Keep alive
+          </label>
+          <div class="paste-json-behavior-wrap">
+            <label class="paste-json-behavior-label" for="paste-json-behavior">Behavior</label>
+            <select id="paste-json-behavior" class="paste-json-behavior-select">
+              <option value="">None</option>
+            </select>
+          </div>
+          <button class="paste-json-create-btn" id="paste-json-create-btn" onclick="createEntityFromPastedJson()" disabled>Create Entity</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Map context menu -->
   <div id="map-context-menu"></div>
 

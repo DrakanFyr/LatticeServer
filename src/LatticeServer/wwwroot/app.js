@@ -1828,6 +1828,569 @@ async function serverToolDeleteAllTasks() {
 }
 
 // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// Paste JSON modal
+// -------------------------------------------------------------------------
+let pasteJsonSpawnLat = null;
+let pasteJsonSpawnLng = null;
+let pasteJsonSpawnPickHandler = null;
+let pasteJsonUniqueCounter = 0;
+const pasteJsonKeepAlives = new Map(); // entityId -> intervalId
+let pasteJsonErrors = [];
+let pasteJsonWarnings = [];
+let pasteJsonErrorListExpanded = false;
+
+function openPasteJsonModal() {
+  document.getElementById('add-entity-menu').classList.remove('open');
+  pasteJsonSpawnLat = null;
+  pasteJsonSpawnLng = null;
+  document.getElementById('paste-json-modal').classList.add('visible');
+  const ta = document.getElementById('paste-json-textarea');
+  updatePasteJsonGutter();
+  validatePasteJson();
+  ta.focus();
+}
+
+function closePasteJsonModal() {
+  if (pasteJsonSpawnPickHandler) {
+    map.off('click', pasteJsonSpawnPickHandler);
+    pasteJsonSpawnPickHandler = null;
+    document.getElementById('map-wrapper').classList.remove('picking');
+    document.getElementById('map-pick-banner')?.classList.remove('visible');
+    resetBannerText();
+  }
+  document.getElementById('paste-json-modal').classList.remove('visible');
+  pasteJsonSpawnLat = null;
+  pasteJsonSpawnLng = null;
+  updatePasteJsonSpawnBtn();
+}
+
+function handlePasteJsonModalBackdropClick(event) {
+  if (event.target === document.getElementById('paste-json-modal')) {
+    closePasteJsonModal();
+  }
+}
+
+function updatePasteJsonGutter() {
+  const ta     = document.getElementById('paste-json-textarea');
+  const gutter = document.getElementById('paste-json-gutter');
+  if (!ta || !gutter) return;
+  const lineCount = ta.value ? ta.value.split('\n').length : 1;
+  const nums = [];
+  for (let i = 1; i <= lineCount; i++) nums.push(i);
+  gutter.textContent = nums.join('\n');
+  gutter.scrollTop = ta.scrollTop;
+}
+
+// Extracts error info including character offset and line/col from JSON.parse().
+function getPasteJsonErrors(text) {
+  if (!text.trim()) return [];
+  try { JSON.parse(text); return []; } catch (e) {
+    const msg = e.message;
+    let offset = -1, line = 1, col = 1;
+    // V8 ≥ ~M96: "… at position N"
+    const byPos = msg.match(/at position (\d+)/);
+    // Firefox / older V8: "… at line L column C …"
+    const byLC  = msg.match(/line (\d+) column (\d+)/);
+    if (byPos) {
+      offset = parseInt(byPos[1], 10);
+      const before = text.substring(0, offset);
+      const lines  = before.split('\n');
+      line = lines.length;
+      col  = lines[lines.length - 1].length + 1;
+    } else if (byLC) {
+      line = parseInt(byLC[1], 10);
+      col  = parseInt(byLC[2], 10);
+      const textLines = text.split('\n');
+      offset = 0;
+      for (let i = 0; i < line - 1 && i < textLines.length; i++) offset += textLines[i].length + 1;
+      offset += Math.max(0, col - 1);
+    }
+    return [{ message: msg, line, col, offset }];
+  }
+}
+
+// Returns [start, end) of the token at `offset` to underline.
+function getJsonErrorExtent(text, offset) {
+  if (offset < 0) return null;
+  // Error reported past the end — point to the last non-whitespace char
+  if (offset >= text.length) {
+    let i = text.length - 1;
+    while (i >= 0 && /\s/.test(text[i])) i--;
+    return i >= 0 ? [i, i + 1] : null;
+  }
+  const ch = text[offset];
+  if ('{}[],:'.includes(ch)) return [offset, offset + 1];
+  if (ch === '"') {
+    let end = offset + 1;
+    while (end < text.length && text[end] !== '"' && text[end] !== '\n') {
+      if (text[end] === '\\') end++;
+      end++;
+    }
+    return [offset, Math.min(end + 1, text.length)];
+  }
+  let end = offset;
+  while (end < text.length && !/[\s,{}[\]:]/.test(text[end]) && text[end] !== '\n') end++;
+  return [offset, Math.max(end, offset + 1)];
+}
+
+function escHtmlForEditor(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Duplicate-field detection ──────────────────────────────────────────────
+
+// Find "fieldName": <jsonValue> in text and return the span of the value token.
+function findFieldValueInText(text, fieldName, value) {
+  const jsonRepr    = JSON.stringify(value); // includes surrounding quotes
+  const escapedKey  = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedVal  = jsonRepr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = new RegExp(`"${escapedKey}"\\s*:\\s*(${escapedVal})`).exec(text);
+  if (!m) return { start: -1, end: -1 };
+  const s = m.index + m[0].length - m[1].length;
+  return { start: s, end: s + m[1].length };
+}
+
+// Find "name": <value> inside the "aliases" block specifically.
+function findAliasNameInText(text, name) {
+  const aliasesM   = /"aliases"\s*:/.exec(text);
+  const from       = aliasesM ? aliasesM.index : 0;
+  const slice      = text.substring(from, Math.min(text.length, from + 800));
+  const { start: ls, end: le } = findFieldValueInText(slice, 'name', name);
+  if (ls === -1) return { start: -1, end: -1 };
+  return { start: from + ls, end: from + le };
+}
+
+// Find "id": <assetId> adjacent to ALT_ID_TYPE_ASSET_ID in the same object.
+function findAssetIdInText(text, assetId) {
+  const typeRe = /"ALT_ID_TYPE_ASSET_ID"/g;
+  let m;
+  while ((m = typeRe.exec(text)) !== null) {
+    const from  = Math.max(0, m.index - 250);
+    const slice = text.substring(from, Math.min(text.length, m.index + 50));
+    const { start: ls, end: le } = findFieldValueInText(slice, 'id', assetId);
+    if (ls !== -1) return { start: from + ls, end: from + le };
+  }
+  return { start: -1, end: -1 };
+}
+
+function checkPasteJsonDuplicates(text) {
+  let entity;
+  try { entity = JSON.parse(text); } catch { return []; }
+  const warnings = [];
+
+  // entityId
+  if (entity.entityId && entityMap.has(entity.entityId)) {
+    const { start, end } = findFieldValueInText(text, 'entityId', entity.entityId);
+    warnings.push({ message: `Entity ID "${entity.entityId}" already exists`, offset: start, offsetEnd: end });
+  }
+
+  // aliases.name
+  const name = entity.aliases?.name;
+  if (name) {
+    for (const [eid, entry] of entityMap) {
+      if (entry.entity.aliases?.name === name) {
+        const { start, end } = findAliasNameInText(text, name);
+        warnings.push({ message: `Name "${name}" already used by ${eid}`, offset: start, offsetEnd: end });
+        break;
+      }
+    }
+  }
+
+  // aliases.alternateIds — asset ID
+  const assetEntry = entity.aliases?.alternateIds?.find(a => a.type === 'ALT_ID_TYPE_ASSET_ID');
+  if (assetEntry?.id) {
+    for (const [eid, entry] of entityMap) {
+      const existing = entry.entity.aliases?.alternateIds?.find(a => a.type === 'ALT_ID_TYPE_ASSET_ID');
+      if (existing?.id === assetEntry.id) {
+        const { start, end } = findAssetIdInText(text, assetEntry.id);
+        warnings.push({ message: `Asset ID "${assetEntry.id}" already used by ${eid}`, offset: start, offsetEnd: end });
+        break;
+      }
+    }
+  }
+
+  return warnings;
+}
+
+function updatePasteJsonHighlight(errors, warnings) {
+  const ta = document.getElementById('paste-json-textarea');
+  const hl = document.getElementById('paste-json-highlight-layer');
+  if (!ta || !hl) return;
+  const text = ta.value;
+
+  // Build a flat list of marks: { start, end, cssClass }
+  const marks = [];
+  for (const err of (errors || [])) {
+    if (err.offset < 0) continue;
+    const extent = getJsonErrorExtent(text, err.offset);
+    if (extent) marks.push({ start: extent[0], end: extent[1], cssClass: 'json-squiggle' });
+  }
+  for (const w of (warnings || [])) {
+    if (w.offset >= 0 && w.offsetEnd > w.offset)
+      marks.push({ start: w.offset, end: w.offsetEnd, cssClass: 'json-warning-squiggle' });
+  }
+
+  if (!marks.length) {
+    hl.textContent = text;
+    hl.scrollTop  = ta.scrollTop;
+    hl.scrollLeft = ta.scrollLeft;
+    return;
+  }
+
+  marks.sort((a, b) => a.start - b.start);
+  let html = '', pos = 0;
+  for (const mark of marks) {
+    if (mark.start < pos) continue; // skip overlapping
+    html += escHtmlForEditor(text.substring(pos, mark.start));
+    html += `<span class="${mark.cssClass}">${escHtmlForEditor(text.substring(mark.start, mark.end))}</span>`;
+    pos = mark.end;
+  }
+  html += escHtmlForEditor(text.substring(pos));
+  hl.innerHTML  = html;
+  hl.scrollTop  = ta.scrollTop;
+  hl.scrollLeft = ta.scrollLeft;
+}
+
+function updatePasteJsonErrorBar(errors, warnings) {
+  const bar = document.getElementById('paste-json-error-bar');
+  if (!bar) return;
+
+  const hasErrors   = errors?.length > 0;
+  const hasWarnings = warnings?.length > 0;
+  if (!hasErrors && !hasWarnings) {
+    bar.classList.remove('visible', 'expanded');
+    bar.innerHTML = '';
+    return;
+  }
+
+  // Summary count chips
+  const countHtml = [
+    hasErrors   ? `<span class="paste-json-error-count">⚠ ${errors.length} error${errors.length !== 1 ? 's' : ''}</span>` : '',
+    hasWarnings ? `<span class="paste-json-warning-count">⚠ ${warnings.length} warning${warnings.length !== 1 ? 's' : ''}</span>` : '',
+  ].filter(Boolean).join(' ');
+
+  // Preview shows the first error (if any), otherwise the first warning
+  const preview = hasErrors
+    ? (errors[0].offset >= 0 ? `Line ${errors[0].line}, Col ${errors[0].col}: ${errors[0].message}` : errors[0].message)
+    : warnings[0].message;
+
+  // Error list items (red)
+  const errorItems = (errors || []).map(err => {
+    const label = err.offset >= 0 ? `Line ${err.line}, Col ${err.col}: ${err.message}` : err.message;
+    return `<div class="paste-json-error-item" onclick="jumpToJsonError(${err.offset})" title="${escHtml(label)}">${escHtml(label)}</div>`;
+  }).join('');
+
+  // Warning list items (yellow)
+  const warningItems = (warnings || []).map(w =>
+    `<div class="paste-json-warning-item" onclick="jumpToJsonError(${w.offset})" title="${escHtml(w.message)}">${escHtml(w.message)}</div>`
+  ).join('');
+
+  bar.innerHTML = `
+    <div class="paste-json-error-summary" onclick="togglePasteJsonErrorList()">
+      ${countHtml}
+      <span class="paste-json-error-preview">${escHtml(preview)}</span>
+      <span class="paste-json-error-chevron">▾</span>
+    </div>
+    <div class="paste-json-error-list">${errorItems}${warningItems}</div>`;
+  bar.classList.add('visible');
+  bar.classList.toggle('expanded', pasteJsonErrorListExpanded);
+}
+
+function showPasteJsonError(message) {
+  const bar = document.getElementById('paste-json-error-bar');
+  if (!bar) return;
+  bar.innerHTML = `
+    <div class="paste-json-error-summary">
+      <span class="paste-json-error-count">⚠ Error</span>
+      <span class="paste-json-error-preview">${escHtml(message)}</span>
+    </div>`;
+  bar.classList.add('visible');
+  bar.classList.remove('expanded');
+}
+
+function togglePasteJsonErrorList() {
+  const bar = document.getElementById('paste-json-error-bar');
+  if (!bar) return;
+  pasteJsonErrorListExpanded = !pasteJsonErrorListExpanded;
+  bar.classList.toggle('expanded', pasteJsonErrorListExpanded);
+}
+
+function jumpToJsonError(offset) {
+  const ta = document.getElementById('paste-json-textarea');
+  if (!ta || offset < 0) return;
+  ta.focus();
+  ta.setSelectionRange(offset, offset);
+  // Scroll so the error line lands ~3 rows from the top
+  const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 19.2;
+  const lineIndex  = ta.value.substring(0, offset).split('\n').length - 1;
+  ta.scrollTop = Math.max(0, (lineIndex - 3) * lineHeight);
+  syncPasteJsonGutterScroll();
+}
+
+function validatePasteJson() {
+  const ta        = document.getElementById('paste-json-textarea');
+  const createBtn = document.getElementById('paste-json-create-btn');
+  if (!ta || !createBtn) return;
+  const text = ta.value.trim();
+  pasteJsonErrors   = text ? getPasteJsonErrors(ta.value) : [];
+  // Only run duplicate checks when the JSON is syntactically valid
+  pasteJsonWarnings = (text && !pasteJsonErrors.length) ? checkPasteJsonDuplicates(ta.value) : [];
+  updatePasteJsonHighlight(pasteJsonErrors, pasteJsonWarnings);
+  updatePasteJsonErrorBar(pasteJsonErrors, pasteJsonWarnings);
+  createBtn.disabled = !text || pasteJsonErrors.length > 0;
+}
+
+function onPasteJsonInput() {
+  updatePasteJsonGutter();
+  validatePasteJson();
+}
+
+function syncPasteJsonGutterScroll() {
+  const ta     = document.getElementById('paste-json-textarea');
+  const gutter = document.getElementById('paste-json-gutter');
+  const hl     = document.getElementById('paste-json-highlight-layer');
+  if (ta && gutter) gutter.scrollTop = ta.scrollTop;
+  if (ta && hl)    { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; }
+}
+
+function handlePasteJsonKeyDown(event) {
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    const ta  = event.target;
+    const s   = ta.selectionStart;
+    const e   = ta.selectionEnd;
+    ta.value  = ta.value.substring(0, s) + '  ' + ta.value.substring(e);
+    ta.selectionStart = ta.selectionEnd = s + 2;
+    onPasteJsonInput();
+  }
+}
+
+async function handlePasteJsonFileOpen(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    document.getElementById('paste-json-textarea').value = text;
+    onPasteJsonInput();
+  } catch (err) {
+    console.error('Failed to read file:', err);
+  }
+  event.target.value = ''; // reset so same file can be re-selected
+}
+
+// Client-side token substitution (mirrors the server's TokenSubstitutor).
+// Tokens appear as JSON string values, e.g. "expiryTime": "<now+300s>".
+function applyClientTokenSubstitution(json) {
+  // <now+Xs> — future timestamp
+  json = json.replace(/"<now\+(\d+)s>"/g, (_, secs) =>
+    '"' + new Date(Date.now() + parseInt(secs, 10) * 1000).toISOString() + '"');
+  // <now> — current timestamp
+  json = json.replace(/"<now>"/g, '"' + new Date().toISOString() + '"');
+  // <new_uuid> — each occurrence gets its own UUID
+  json = json.replace(/"<new_uuid>"/g, () => '"' + crypto.randomUUID() + '"');
+  // <unique_number> — zero-padded incrementing counter (module-scoped)
+  json = json.replace(/"<unique_number>"/g,
+    () => '"' + String(++pasteJsonUniqueCounter).padStart(6, '0') + '"');
+  return json;
+}
+
+async function createEntityFromPastedJson() {
+  const ta             = document.getElementById('paste-json-textarea');
+  const keepAlive      = document.getElementById('paste-json-keepalive').checked;
+  const behaviorId     = document.getElementById('paste-json-behavior')?.value || '';
+
+  let jsonText = ta.value.trim();
+  if (!jsonText) return;
+
+  jsonText = applyClientTokenSubstitution(jsonText);
+
+  let entity;
+  try {
+    entity = JSON.parse(jsonText);
+  } catch (e) {
+    showPasteJsonError(e.message);
+    return;
+  }
+
+  // Inject spawn location if chosen
+  if (pasteJsonSpawnLat !== null && pasteJsonSpawnLng !== null) {
+    entity.location          = entity.location          || {};
+    entity.location.position = entity.location.position || {};
+    entity.location.position.latitudeDegrees  = pasteJsonSpawnLat;
+    entity.location.position.longitudeDegrees = pasteJsonSpawnLng;
+  }
+
+  try {
+    let res;
+    if (behaviorId) {
+      // Spawn as a live template instance using the editor JSON as the entity,
+      // with the selected template's behavior (dll) wired up.
+      res = await fetch(`/api/v1/templates/${encodeURIComponent(behaviorId)}/spawn`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ entityJsonOverride: JSON.stringify(entity) }),
+      });
+    } else {
+      // Plain entity publish — no behavior
+      res = await fetch('/api/v1/entities', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(entity),
+      });
+    }
+
+    if (res.ok) {
+      const data = await res.json();
+      const entityId = data.entityId;
+      console.info(`Created entity '${entityId}' from pasted JSON${behaviorId ? ` with behavior '${behaviorId}'` : ''}`);
+      if (keepAlive && !behaviorId) startPasteJsonKeepAlive(entityId);
+      closePasteJsonModal();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showPasteJsonError('Server error: ' + (err.message || res.status));
+    }
+  } catch (err) {
+    showPasteJsonError('Request failed: ' + err.message);
+  }
+}
+
+function startPasteJsonKeepAlive(entityId) {
+  if (pasteJsonKeepAlives.has(entityId)) return;
+  const INTERVAL_MS      = 30_000; // refresh every 30 s
+  const EXPIRY_EXTEND_S  = 300;    // extend expiry 5 min into the future
+
+  const id = setInterval(async () => {
+    const entry = entityMap.get(entityId);
+    if (!entry) { clearInterval(id); pasteJsonKeepAlives.delete(entityId); return; }
+
+    const updated = JSON.parse(JSON.stringify(entry.entity));
+    const nowIso  = new Date().toISOString();
+    const expiryIso = new Date(Date.now() + EXPIRY_EXTEND_S * 1000).toISOString();
+    if ('sourceUpdateTime' in updated || updated.sourceUpdateTime !== undefined) {
+      updated.sourceUpdateTime = nowIso;
+    }
+    updated.expiryTime = expiryIso;
+
+    try {
+      await fetch('/api/v1/entities', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(updated),
+      });
+    } catch (err) {
+      console.error('Keep-alive refresh failed for', entityId, err);
+    }
+  }, INTERVAL_MS);
+
+  pasteJsonKeepAlives.set(entityId, id);
+}
+
+function beginPasteJsonSpawnPick() {
+  document.getElementById('paste-json-modal').classList.remove('visible');
+
+  if (pasteJsonSpawnPickHandler) map.off('click', pasteJsonSpawnPickHandler);
+
+  const banner = document.getElementById('map-pick-banner');
+  if (banner) banner.textContent = 'Click the map to set spawn location · Esc to cancel';
+  document.getElementById('map-wrapper').classList.add('picking');
+  banner?.classList.add('visible');
+
+  pasteJsonSpawnPickHandler = (e) => {
+    pasteJsonSpawnPickHandler = null;
+    document.getElementById('map-wrapper').classList.remove('picking');
+    document.getElementById('map-pick-banner')?.classList.remove('visible');
+    resetBannerText();
+
+    pasteJsonSpawnLat = e.latlng.lat;
+    pasteJsonSpawnLng = e.latlng.lng;
+
+    injectSpawnLocationIntoEditor(pasteJsonSpawnLat, pasteJsonSpawnLng);
+    updatePasteJsonSpawnBtn();
+
+    document.getElementById('paste-json-modal').classList.add('visible');
+  };
+  map.once('click', pasteJsonSpawnPickHandler);
+}
+
+function injectSpawnLocationIntoEditor(lat, lng) {
+  const ta  = document.getElementById('paste-json-textarea');
+  const text = ta.value.trim();
+  if (!text) return;
+
+  const latVal = parseFloat(lat.toFixed(6));
+  const lngVal = parseFloat(lng.toFixed(6));
+
+  // Prefer a clean parse → modify → re-stringify when the JSON is valid.
+  try {
+    const entity = JSON.parse(text);
+    entity.location          = entity.location          || {};
+    entity.location.position = entity.location.position || {};
+    entity.location.position.latitudeDegrees  = latVal;
+    entity.location.position.longitudeDegrees = lngVal;
+    ta.value = JSON.stringify(entity, null, 2);
+  } catch (_) {
+    // JSON has un-substituted tokens or is malformed — use targeted regex.
+    let updated = text;
+    updated = updated.replace(/("latitudeDegrees"\s*:\s*)[^\s,\n}]+/,  (_, p) => p + latVal);
+    updated = updated.replace(/("longitudeDegrees"\s*:\s*)[^\s,\n}]+/, (_, p) => p + lngVal);
+    ta.value = updated;
+  }
+  onPasteJsonInput();
+}
+
+function updatePasteJsonBehaviorSelect() {
+  const sel = document.getElementById('paste-json-behavior');
+  if (!sel) return;
+  const previous = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  const taskable = entityTemplates
+    .filter(t => t.isTaskable)
+    .sort((a, b) => (a.displayName || a.templateId).localeCompare(b.displayName || b.templateId));
+  for (const t of taskable) {
+    const opt = document.createElement('option');
+    opt.value = t.templateId;
+    opt.textContent = t.displayName || t.templateId;
+    sel.appendChild(opt);
+  }
+  if (previous && [...sel.options].some(o => o.value === previous)) sel.value = previous;
+}
+
+function updatePasteJsonSpawnBtn() {
+  const btn = document.getElementById('paste-json-spawn-btn');
+  if (!btn) return;
+  if (pasteJsonSpawnLat !== null && pasteJsonSpawnLng !== null) {
+    btn.textContent = `${pasteJsonSpawnLat.toFixed(4)}°, ${pasteJsonSpawnLng.toFixed(4)}°`;
+    btn.classList.add('location-set');
+  } else {
+    btn.textContent = 'Choose Spawn Location';
+    btn.classList.remove('location-set');
+  }
+}
+
+function generatePasteJsonEntityId() {
+  const ta  = document.getElementById('paste-json-textarea');
+  const newId = crypto.randomUUID();
+
+  // Prefer parse → set → re-stringify when the JSON is valid.
+  try {
+    const entity = JSON.parse(ta.value);
+    entity.entityId = newId;
+    ta.value = JSON.stringify(entity, null, 2);
+  } catch (_) {
+    // Fall back to targeted regex replacement for token-containing or malformed JSON.
+    const replaced = ta.value.replace(
+      /("entityId"\s*:\s*)"[^"]*"/,
+      (_, prefix) => prefix + '"' + newId + '"'
+    );
+    // If the field wasn't found, don't silently discard it — just leave the editor unchanged.
+    if (replaced !== ta.value) {
+      ta.value = replaced;
+    }
+  }
+  onPasteJsonInput();
+}
+
 // Add Entity — template dropdown + map placement
 // -------------------------------------------------------------------------
 let entityTemplates = [];
@@ -1839,6 +2402,7 @@ async function loadEntityTemplates() {
     if (!res.ok) { console.error('Failed to load templates:', res.status); return; }
     entityTemplates = await res.json();
     renderAddEntityMenu();
+    updatePasteJsonBehaviorSelect();
   } catch (err) {
     console.error('Failed to load templates:', err);
   }
@@ -1907,7 +2471,12 @@ function buildEntityCategoryRows(actionFn) {
 function renderAddEntityMenu() {
   const menu = document.getElementById('add-entity-menu');
   if (!menu) return;
-  menu.innerHTML = '<div class="add-entity-label">Add Entity</div>' + buildEntityCategoryRows('beginEntityPlacement');
+  const categoryRows = buildEntityCategoryRows('beginEntityPlacement');
+  const divider = categoryRows ? '<hr class="add-entity-divider">' : '';
+  menu.innerHTML = '<div class="add-entity-label">Add Entity</div>'
+    + categoryRows
+    + divider
+    + '<button class="add-entity-paste-btn" onclick="openPasteJsonModal()">Paste JSON\u2026</button>';
 }
 
 let _flyoutCloseTimer = null;
@@ -2073,6 +2642,15 @@ function spawnFromContextMenu(templateId, _displayName) {
 // Cancel placement on Escape (alongside existing escape handling)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if (pasteJsonSpawnPickHandler) {
+      map.off('click', pasteJsonSpawnPickHandler);
+      pasteJsonSpawnPickHandler = null;
+      document.getElementById('map-wrapper').classList.remove('picking');
+      document.getElementById('map-pick-banner')?.classList.remove('visible');
+      resetBannerText();
+      // Re-show the paste JSON modal after cancelling location pick
+      document.getElementById('paste-json-modal').classList.add('visible');
+    }
     if (spawnPickHandler) {
       map.off('click', spawnPickHandler);
       spawnPickHandler = null;

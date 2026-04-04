@@ -696,3 +696,311 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   border-top: 1px solid #30363d;
   margin: 4px 0;
 }
+.add-entity-paste-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  border: none;
+  background: none;
+  color: #e6edf3;
+  margin: 1px 0;
+}
+.add-entity-paste-btn:hover { background: #21262d; color: #3fb950; }
+
+/* ── Paste JSON modal ── */
+#paste-json-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0,0,0,0.7);
+  align-items: center;
+  justify-content: center;
+}
+#paste-json-modal.visible { display: flex; }
+
+.paste-json-box {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  width: min(860px, 92vw);
+  height: min(640px, 85vh);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+}
+
+.paste-json-browse-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 10px;
+  transition: border-color 0.15s, color 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+}
+.paste-json-browse-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+.paste-json-editor-wrap {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.paste-json-gutter {
+  flex-shrink: 0;
+  width: 44px;
+  background: #0d1117;
+  border-right: 1px solid #21262d;
+  padding: 14px 6px 14px 0;
+  text-align: right;
+  font-family: "SF Mono","Fira Code",monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #484f58;
+  user-select: none;
+  overflow: hidden;
+  white-space: pre;
+}
+
+.paste-json-code-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Both layers share the same geometry so squiggles align with text */
+.paste-json-highlight-layer,
+.paste-json-textarea {
+  position: absolute;
+  inset: 0;
+  font-family: "SF Mono","Fira Code",monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 14px;
+  white-space: pre;
+  tab-size: 2;
+  word-wrap: normal;
+  border: none;
+  outline: none;
+  resize: none;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Highlight layer sits behind the (transparent) textarea */
+.paste-json-highlight-layer {
+  background: #0d1117;
+  color: transparent;     /* text invisible — only decorations show */
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;       /* scroll is driven by the textarea */
+  user-select: none;
+}
+.json-squiggle {
+  text-decoration: underline wavy #f85149;
+  text-decoration-skip-ink: none;
+  color: transparent;
+}
+.json-warning-squiggle {
+  text-decoration: underline wavy #d29922;
+  text-decoration-skip-ink: none;
+  color: transparent;
+}
+
+.paste-json-textarea {
+  background: transparent;
+  color: #e6edf3;
+  caret-color: #e6edf3;
+  z-index: 1;
+  overflow: auto;
+}
+.paste-json-textarea::-webkit-scrollbar { width: 6px; height: 6px; }
+.paste-json-textarea::-webkit-scrollbar-track { background: transparent; }
+.paste-json-textarea::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+.paste-json-textarea::placeholder { color: #484f58; }
+
+/* ── Paste JSON error bar (expandable) ── */
+.paste-json-error-bar {
+  flex-shrink: 0;
+  display: none;
+  flex-direction: column;
+  background: #1a0e0e;
+  border-top: 1px solid #3d1a1a;
+  max-height: 150px;
+}
+.paste-json-error-bar.visible { display: flex; }
+
+.paste-json-error-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+.paste-json-error-summary:hover { background: rgba(248,81,73,0.06); }
+
+.paste-json-error-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f85149;
+}
+.paste-json-error-preview {
+  flex: 1;
+  font-size: 11px;
+  color: #f85149;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paste-json-error-chevron {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: #8b949e;
+  transition: transform 0.15s;
+}
+.paste-json-error-bar.expanded .paste-json-error-chevron { transform: rotate(180deg); }
+
+.paste-json-error-list {
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  border-top: 1px solid #2d1515;
+}
+.paste-json-error-list::-webkit-scrollbar { width: 4px; }
+.paste-json-error-list::-webkit-scrollbar-thumb { background: #3d1a1a; border-radius: 2px; }
+.paste-json-error-bar.expanded .paste-json-error-list { display: flex; }
+
+.paste-json-error-item {
+  padding: 4px 14px 4px 26px;
+  font-size: 11px;
+  color: #f85149;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.paste-json-error-item:hover { text-decoration: underline; background: rgba(248,81,73,0.05); }
+
+.paste-json-warning-count { font-size: 11px; font-weight: 600; color: #d29922; flex-shrink: 0; }
+.paste-json-warning-item {
+  padding: 4px 14px 4px 26px;
+  font-size: 11px;
+  color: #d29922;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.paste-json-warning-item:hover { text-decoration: underline; background: rgba(210,153,34,0.05); }
+
+.paste-json-footer {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid #30363d;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.paste-json-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.paste-json-spawn-btn {
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.paste-json-spawn-btn:hover { border-color: #d29922; color: #d29922; }
+.paste-json-spawn-btn.location-set { border-color: #39d353; color: #39d353; }
+
+.paste-json-gen-id-btn {
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.paste-json-gen-id-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+.paste-json-keepalive-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #8b949e;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.paste-json-keepalive-label input { cursor: pointer; accent-color: #58a6ff; }
+
+.paste-json-behavior-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.paste-json-behavior-label {
+  font-size: 12px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+.paste-json-behavior-select {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #e6edf3;
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+  max-width: 160px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.paste-json-behavior-select:hover,
+.paste-json-behavior-select:focus { border-color: #58a6ff; }
+.paste-json-behavior-select option { background: #161b22; color: #e6edf3; }
+
+.paste-json-create-btn {
+  background: #1f6feb;
+  border: none;
+  border-radius: 5px;
+  color: #e6edf3;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.paste-json-create-btn:hover:not(:disabled) { background: #388bfd; }
+.paste-json-create-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }

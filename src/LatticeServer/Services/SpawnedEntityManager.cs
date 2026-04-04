@@ -52,11 +52,15 @@ public class SpawnedEntityManager : IDisposable
     /// <summary>Spawn a new instance of the given template.</summary>
     public string Spawn(TemplateDefinition template, SpawnOptions? options = null)
     {
-        // 1. Token substitution
-        var json = TokenSubstitutor.Substitute(template.RawEntityJson);
+        // 1. Token substitution — use caller-supplied JSON if provided, else template default
+        var rawJson = options?.EntityJsonOverride ?? template.RawEntityJson;
+        var json = TokenSubstitutor.Substitute(rawJson);
 
-        // 2. Resolve spawn location and merge into JSON
-        var location = ResolveLocation(options, template.Config);
+        // 2. Resolve spawn location and merge into JSON.
+        // When the caller supplies their own entity JSON, don't fall back to the
+        // template's default location — the JSON already contains the desired location.
+        // Only merge if explicit coordinates were passed via SpawnOptions.
+        var location = ResolveLocation(options, options?.EntityJsonOverride != null ? null : template.Config);
         if (location != null)
         {
             json = MergeLocation(json, location);
@@ -460,6 +464,11 @@ public class SpawnOptions
     public double? AltitudeHaeMeters { get; set; }
     public string? NameOverride { get; set; }
     public JsonElement? ExtraJsonPatch { get; set; }
+    /// <summary>
+    /// When set, replaces the template's entity.json as the starting entity JSON.
+    /// The template's behavior (dll) is still wired up normally.
+    /// </summary>
+    public string? EntityJsonOverride { get; set; }
 }
 
 // -------------------------------------------------------------------------
