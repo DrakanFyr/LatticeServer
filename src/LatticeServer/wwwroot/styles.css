@@ -612,13 +612,13 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   background: none;
   border: 1px solid #30363d;
   border-radius: 5px;
-  color: #3fb950;
+  color: #8b949e;
   cursor: pointer;
   font-size: 12px;
   padding: 3px 8px;
   transition: border-color 0.15s, color 0.15s;
 }
-#add-entity-btn:hover { border-color: #3fb950; color: #3fb950; }
+#add-entity-btn:hover { border-color: #58a6ff; color: #58a6ff; }
 
 #add-entity-menu,
 #map-context-menu {
@@ -690,13 +690,13 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   color: #e6edf3;
   margin: 1px 0;
 }
-.add-entity-item:hover { background: #21262d; color: #3fb950; }
+.add-entity-item:hover { background: #21262d; }
 .add-entity-divider {
   border: none;
   border-top: 1px solid #30363d;
   margin: 4px 0;
 }
-.add-entity-paste-btn {
+.add-entity-from-json-btn {
   display: block;
   width: 100%;
   padding: 6px 10px;
@@ -709,10 +709,10 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   color: #e6edf3;
   margin: 1px 0;
 }
-.add-entity-paste-btn:hover { background: #21262d; color: #3fb950; }
+.add-entity-from-json-btn:hover { background: #21262d; }
 
-/* ── Paste JSON modal ── */
-#paste-json-modal {
+/* ── From JSON modal ── */
+#from-json-modal {
   display: none;
   position: fixed;
   inset: 0;
@@ -721,9 +721,9 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   align-items: center;
   justify-content: center;
 }
-#paste-json-modal.visible { display: flex; }
+#from-json-modal.visible { display: flex; }
 
-.paste-json-box {
+.from-json-box {
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -734,7 +734,7 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   box-shadow: 0 16px 48px rgba(0,0,0,0.7);
 }
 
-.paste-json-browse-btn {
+.from-json-browse-btn {
   display: inline-flex;
   align-items: center;
   background: none;
@@ -748,15 +748,16 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   user-select: none;
   flex-shrink: 0;
 }
-.paste-json-browse-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.from-json-browse-btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
+.from-json-browse-btn:disabled { opacity: 0.4; cursor: default; }
 
-.paste-json-editor-wrap {
+.from-json-editor-wrap {
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 
-.paste-json-gutter {
+.from-json-gutter {
   flex-shrink: 0;
   width: 44px;
   background: #0d1117;
@@ -772,15 +773,15 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   white-space: pre;
 }
 
-.paste-json-code-container {
+.from-json-code-container {
   flex: 1;
   position: relative;
   overflow: hidden;
 }
 
 /* Both layers share the same geometry so squiggles align with text */
-.paste-json-highlight-layer,
-.paste-json-textarea {
+.from-json-highlight-layer,
+.from-json-textarea {
   position: absolute;
   inset: 0;
   font-family: "SF Mono","Fira Code",monospace;
@@ -798,7 +799,7 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
 }
 
 /* Highlight layer sits behind the (transparent) textarea */
-.paste-json-highlight-layer {
+.from-json-highlight-layer {
   background: #0d1117;
   color: transparent;     /* text invisible — only decorations show */
   pointer-events: none;
@@ -817,30 +818,29 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   color: transparent;
 }
 
-.paste-json-textarea {
+.from-json-textarea {
   background: transparent;
   color: #e6edf3;
   caret-color: #e6edf3;
   z-index: 1;
   overflow: auto;
 }
-.paste-json-textarea::-webkit-scrollbar { width: 6px; height: 6px; }
-.paste-json-textarea::-webkit-scrollbar-track { background: transparent; }
-.paste-json-textarea::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
-.paste-json-textarea::placeholder { color: #484f58; }
+.from-json-textarea::-webkit-scrollbar { width: 6px; height: 6px; }
+.from-json-textarea::-webkit-scrollbar-track { background: transparent; }
+.from-json-textarea::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+.from-json-textarea::placeholder { color: #484f58; }
 
-/* ── Paste JSON error bar (expandable) ── */
-.paste-json-error-bar {
+/* ── From JSON error bar (expandable) ── */
+.from-json-error-bar {
   flex-shrink: 0;
   display: none;
   flex-direction: column;
-  background: #1a0e0e;
-  border-top: 1px solid #3d1a1a;
+  border-top: 1px solid #30363d;
   max-height: 150px;
 }
-.paste-json-error-bar.visible { display: flex; }
+.from-json-error-bar.visible { display: flex; }
 
-.paste-json-error-summary {
+.from-json-error-summary {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -849,42 +849,34 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   user-select: none;
   flex-shrink: 0;
 }
-.paste-json-error-summary:hover { background: rgba(248,81,73,0.06); }
 
-.paste-json-error-count {
+.from-json-error-count {
   flex-shrink: 0;
   font-size: 11px;
   font-weight: 600;
   color: #f85149;
 }
-.paste-json-error-preview {
-  flex: 1;
-  font-size: 11px;
-  color: #f85149;
-  opacity: 0.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.paste-json-error-chevron {
+.from-json-error-chevron {
+  margin-left: auto;
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: 18px;
+  line-height: 1;
   color: #8b949e;
   transition: transform 0.15s;
 }
-.paste-json-error-bar.expanded .paste-json-error-chevron { transform: rotate(180deg); }
+.from-json-error-bar.expanded .from-json-error-chevron { transform: rotate(180deg); }
 
-.paste-json-error-list {
+.from-json-error-list {
   display: none;
   flex-direction: column;
   overflow-y: auto;
-  border-top: 1px solid #2d1515;
+  border-top: 1px solid #30363d;
 }
-.paste-json-error-list::-webkit-scrollbar { width: 4px; }
-.paste-json-error-list::-webkit-scrollbar-thumb { background: #3d1a1a; border-radius: 2px; }
-.paste-json-error-bar.expanded .paste-json-error-list { display: flex; }
+.from-json-error-list::-webkit-scrollbar { width: 4px; }
+.from-json-error-list::-webkit-scrollbar-thumb { background: #3d1a1a; border-radius: 2px; }
+.from-json-error-bar.expanded .from-json-error-list { display: flex; }
 
-.paste-json-error-item {
+.from-json-error-item {
   padding: 4px 14px 4px 26px;
   font-size: 11px;
   color: #f85149;
@@ -894,10 +886,10 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
-.paste-json-error-item:hover { text-decoration: underline; background: rgba(248,81,73,0.05); }
+.from-json-error-item:hover { text-decoration: underline; }
 
-.paste-json-warning-count { font-size: 11px; font-weight: 600; color: #d29922; flex-shrink: 0; }
-.paste-json-warning-item {
+.from-json-warning-count { font-size: 11px; font-weight: 600; color: #d29922; flex-shrink: 0; }
+.from-json-warning-item {
   padding: 4px 14px 4px 26px;
   font-size: 11px;
   color: #d29922;
@@ -907,9 +899,9 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
-.paste-json-warning-item:hover { text-decoration: underline; background: rgba(210,153,34,0.05); }
+.from-json-warning-item:hover { text-decoration: underline; }
 
-.paste-json-footer {
+.from-json-footer {
   display: flex;
   align-items: center;
   padding: 10px 14px;
@@ -918,14 +910,14 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   gap: 8px;
 }
 
-.paste-json-footer-right {
+.from-json-footer-right {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-left: auto;
 }
 
-.paste-json-spawn-btn {
+.from-json-spawn-btn {
   background: none;
   border: 1px solid #30363d;
   border-radius: 5px;
@@ -936,10 +928,10 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   transition: border-color 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.paste-json-spawn-btn:hover { border-color: #d29922; color: #d29922; }
-.paste-json-spawn-btn.location-set { border-color: #39d353; color: #39d353; }
+.from-json-spawn-btn:hover { border-color: #d29922; color: #d29922; }
+.from-json-spawn-btn.location-set { border-color: #39d353; color: #39d353; }
 
-.paste-json-gen-id-btn {
+.from-json-gen-id-btn {
   background: none;
   border: 1px solid #30363d;
   border-radius: 5px;
@@ -950,9 +942,58 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   transition: border-color 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.paste-json-gen-id-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.from-json-gen-id-btn:hover { border-color: #58a6ff; color: #58a6ff; }
 
-.paste-json-keepalive-label {
+.from-json-token-wrap {
+  position: relative;
+}
+.from-json-token-btn {
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.from-json-token-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.from-json-token-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 2000;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  min-width: 200px;
+}
+.from-json-token-menu.open { display: block; }
+.from-json-token-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  border: none;
+  background: none;
+  color: #e6edf3;
+  margin: 1px 0;
+}
+.from-json-token-item:hover { background: #21262d; }
+.from-json-token-item-desc {
+  font-size: 10px;
+  color: #8b949e;
+  margin-top: 1px;
+}
+
+.from-json-keepalive-label {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -962,19 +1003,19 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   user-select: none;
   white-space: nowrap;
 }
-.paste-json-keepalive-label input { cursor: pointer; accent-color: #58a6ff; }
+.from-json-keepalive-label input { cursor: pointer; accent-color: #58a6ff; }
 
-.paste-json-behavior-wrap {
+.from-json-behavior-wrap {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.paste-json-behavior-label {
+.from-json-behavior-label {
   font-size: 12px;
   color: #8b949e;
   white-space: nowrap;
 }
-.paste-json-behavior-select {
+.from-json-behavior-select {
   background: #0d1117;
   border: 1px solid #30363d;
   border-radius: 5px;
@@ -986,11 +1027,11 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   max-width: 160px;
   transition: border-color 0.15s, color 0.15s;
 }
-.paste-json-behavior-select:hover,
-.paste-json-behavior-select:focus { border-color: #58a6ff; }
-.paste-json-behavior-select option { background: #161b22; color: #e6edf3; }
+.from-json-behavior-select:hover,
+.from-json-behavior-select:focus { border-color: #58a6ff; }
+.from-json-behavior-select option { background: #161b22; color: #e6edf3; }
 
-.paste-json-create-btn {
+.from-json-create-btn {
   background: #1f6feb;
   border: none;
   border-radius: 5px;
@@ -1002,5 +1043,5 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
   transition: background 0.15s;
   white-space: nowrap;
 }
-.paste-json-create-btn:hover:not(:disabled) { background: #388bfd; }
-.paste-json-create-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+.from-json-create-btn:hover:not(:disabled) { background: #388bfd; }
+.from-json-create-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }

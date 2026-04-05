@@ -562,6 +562,40 @@ function copyEntityJson() {
   navigator.clipboard.writeText(text).catch(() => {});
 }
 
+function cloneEntityJson() {
+  const text = document.getElementById('entity-json-pre').textContent;
+  if (!text) return;
+  closeEntityJsonModal();
+  const ta = document.getElementById('from-json-textarea');
+  if (ta) {
+    ta.value = text;
+  }
+  openFromJsonModal();
+}
+
+function entityJsonFilename(obj) {
+  const name    = obj?.aliases?.name;
+  const assetId = obj?.aliases?.alternateIds?.ALT_ID_TYPE_ASSET_ID?.id;
+  const entityId = obj?.entityId;
+  const raw = name || assetId || entityId;
+  if (!raw) return 'entity.json';
+  return `${raw.toLowerCase().replace(/\s+/g, '-')}.json`;
+}
+
+function saveEntityJsonAsFile() {
+  const text = document.getElementById('entity-json-pre').textContent;
+  if (!text) return;
+  let filename = 'entity.json';
+  try { filename = entityJsonFilename(JSON.parse(text)); } catch { /* use default */ }
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Dev actions ──
 async function clearEntityTasks(entityId) {
   try {
@@ -1771,6 +1805,12 @@ document.addEventListener('click', (e) => {
   if (ctxMenu?.classList.contains('open') && !ctxMenu.contains(e.target) && !clickedFlyout) {
     closeMapContextMenu();
   }
+  // Close insert-token menu on outside click
+  const tokenMenu = document.getElementById('from-json-token-menu');
+  const tokenBtn  = document.getElementById('from-json-token-btn');
+  if (tokenMenu?.classList.contains('open') && !tokenMenu.contains(e.target) && !tokenBtn?.contains(e.target)) {
+    tokenMenu.classList.remove('open');
+  }
 });
 
 function toggleServerToolsMenu(e) {
@@ -1829,51 +1869,51 @@ async function serverToolDeleteAllTasks() {
 
 // -------------------------------------------------------------------------
 // -------------------------------------------------------------------------
-// Paste JSON modal
+// From JSON modal
 // -------------------------------------------------------------------------
-let pasteJsonSpawnLat = null;
-let pasteJsonSpawnLng = null;
-let pasteJsonSpawnPickHandler = null;
-let pasteJsonUniqueCounter = 0;
-const pasteJsonKeepAlives = new Map(); // entityId -> intervalId
-let pasteJsonErrors = [];
-let pasteJsonWarnings = [];
-let pasteJsonErrorListExpanded = false;
+let fromJsonSpawnLat = null;
+let fromJsonSpawnLng = null;
+let fromJsonSpawnPickHandler = null;
+let fromJsonUniqueCounter = 0;
+const fromJsonKeepAlives = new Map(); // entityId -> intervalId
+let fromJsonErrors = [];
+let fromJsonWarnings = [];
+let fromJsonErrorListExpanded = false;
 
-function openPasteJsonModal() {
+function openFromJsonModal() {
   document.getElementById('add-entity-menu').classList.remove('open');
-  pasteJsonSpawnLat = null;
-  pasteJsonSpawnLng = null;
-  document.getElementById('paste-json-modal').classList.add('visible');
-  const ta = document.getElementById('paste-json-textarea');
-  updatePasteJsonGutter();
-  validatePasteJson();
+  fromJsonSpawnLat = null;
+  fromJsonSpawnLng = null;
+  document.getElementById('from-json-modal').classList.add('visible');
+  const ta = document.getElementById('from-json-textarea');
+  updateFromJsonGutter();
+  validateFromJson();
   ta.focus();
 }
 
-function closePasteJsonModal() {
-  if (pasteJsonSpawnPickHandler) {
-    map.off('click', pasteJsonSpawnPickHandler);
-    pasteJsonSpawnPickHandler = null;
+function closeFromJsonModal() {
+  if (fromJsonSpawnPickHandler) {
+    map.off('click', fromJsonSpawnPickHandler);
+    fromJsonSpawnPickHandler = null;
     document.getElementById('map-wrapper').classList.remove('picking');
     document.getElementById('map-pick-banner')?.classList.remove('visible');
     resetBannerText();
   }
-  document.getElementById('paste-json-modal').classList.remove('visible');
-  pasteJsonSpawnLat = null;
-  pasteJsonSpawnLng = null;
-  updatePasteJsonSpawnBtn();
+  document.getElementById('from-json-modal').classList.remove('visible');
+  fromJsonSpawnLat = null;
+  fromJsonSpawnLng = null;
+  updateFromJsonSpawnBtn();
 }
 
-function handlePasteJsonModalBackdropClick(event) {
-  if (event.target === document.getElementById('paste-json-modal')) {
-    closePasteJsonModal();
+function handleFromJsonModalBackdropClick(event) {
+  if (event.target === document.getElementById('from-json-modal')) {
+    closeFromJsonModal();
   }
 }
 
-function updatePasteJsonGutter() {
-  const ta     = document.getElementById('paste-json-textarea');
-  const gutter = document.getElementById('paste-json-gutter');
+function updateFromJsonGutter() {
+  const ta     = document.getElementById('from-json-textarea');
+  const gutter = document.getElementById('from-json-gutter');
   if (!ta || !gutter) return;
   const lineCount = ta.value ? ta.value.split('\n').length : 1;
   const nums = [];
@@ -1882,10 +1922,21 @@ function updatePasteJsonGutter() {
   gutter.scrollTop = ta.scrollTop;
 }
 
+// Replace token placeholders with valid JSON so the parser doesn't choke on them.
+// Whole-value tokens ("< ... >") become a string; tokens embedded inside a string
+// value become null so the surrounding quotes stay valid.
+function sanitizeTokensForParse(text) {
+  return text.replace(/"<[^"]*>"/g, '"__token__"').replace(/<[^>]*>/g, 'null');
+}
+
 // Extracts error info including character offset and line/col from JSON.parse().
-function getPasteJsonErrors(text) {
+function getFromJsonErrors(text) {
   if (!text.trim()) return [];
-  try { JSON.parse(text); return []; } catch (e) {
+  // Replace tokens with valid JSON string placeholders before parsing so they
+  // don't produce false syntax errors.
+  // Replace tokens (quoted or unquoted) with a valid JSON string placeholder.
+  const sanitized = sanitizeTokensForParse(text);
+  try { JSON.parse(sanitized); return []; } catch (e) {
     const msg = e.message;
     let offset = -1, line = 1, col = 1;
     // V8 ≥ ~M96: "… at position N"
@@ -1974,9 +2025,10 @@ function findAssetIdInText(text, assetId) {
   return { start: -1, end: -1 };
 }
 
-function checkPasteJsonDuplicates(text) {
+function checkFromJsonDuplicates(text) {
   let entity;
-  try { entity = JSON.parse(text); } catch { return []; }
+  const sanitized = sanitizeTokensForParse(text);
+  try { entity = JSON.parse(sanitized); } catch { return []; }
   const warnings = [];
 
   // entityId
@@ -2013,9 +2065,9 @@ function checkPasteJsonDuplicates(text) {
   return warnings;
 }
 
-function updatePasteJsonHighlight(errors, warnings) {
-  const ta = document.getElementById('paste-json-textarea');
-  const hl = document.getElementById('paste-json-highlight-layer');
+function updateFromJsonHighlight(errors, warnings) {
+  const ta = document.getElementById('from-json-textarea');
+  const hl = document.getElementById('from-json-highlight-layer');
   if (!ta || !hl) return;
   const text = ta.value;
 
@@ -2052,8 +2104,8 @@ function updatePasteJsonHighlight(errors, warnings) {
   hl.scrollLeft = ta.scrollLeft;
 }
 
-function updatePasteJsonErrorBar(errors, warnings) {
-  const bar = document.getElementById('paste-json-error-bar');
+function updateFromJsonErrorBar(errors, warnings) {
+  const bar = document.getElementById('from-json-error-bar');
   if (!bar) return;
 
   const hasErrors   = errors?.length > 0;
@@ -2066,58 +2118,53 @@ function updatePasteJsonErrorBar(errors, warnings) {
 
   // Summary count chips
   const countHtml = [
-    hasErrors   ? `<span class="paste-json-error-count">⚠ ${errors.length} error${errors.length !== 1 ? 's' : ''}</span>` : '',
-    hasWarnings ? `<span class="paste-json-warning-count">⚠ ${warnings.length} warning${warnings.length !== 1 ? 's' : ''}</span>` : '',
+    hasErrors   ? `<span class="from-json-error-count">⚠ ${errors.length} error${errors.length !== 1 ? 's' : ''}</span>` : '',
+    hasWarnings ? `<span class="from-json-warning-count">⚠ ${warnings.length} warning${warnings.length !== 1 ? 's' : ''}</span>` : '',
   ].filter(Boolean).join(' ');
 
-  // Preview shows the first error (if any), otherwise the first warning
-  const preview = hasErrors
-    ? (errors[0].offset >= 0 ? `Line ${errors[0].line}, Col ${errors[0].col}: ${errors[0].message}` : errors[0].message)
-    : warnings[0].message;
 
   // Error list items (red)
   const errorItems = (errors || []).map(err => {
     const label = err.offset >= 0 ? `Line ${err.line}, Col ${err.col}: ${err.message}` : err.message;
-    return `<div class="paste-json-error-item" onclick="jumpToJsonError(${err.offset})" title="${escHtml(label)}">${escHtml(label)}</div>`;
+    return `<div class="from-json-error-item" onclick="jumpToJsonError(${err.offset})" title="${escHtml(label)}">${escHtml(label)}</div>`;
   }).join('');
 
   // Warning list items (yellow)
   const warningItems = (warnings || []).map(w =>
-    `<div class="paste-json-warning-item" onclick="jumpToJsonError(${w.offset})" title="${escHtml(w.message)}">${escHtml(w.message)}</div>`
+    `<div class="from-json-warning-item" onclick="jumpToJsonError(${w.offset})" title="${escHtml(w.message)}">${escHtml(w.message)}</div>`
   ).join('');
 
   bar.innerHTML = `
-    <div class="paste-json-error-summary" onclick="togglePasteJsonErrorList()">
+    <div class="from-json-error-summary" onclick="toggleFromJsonErrorList()">
       ${countHtml}
-      <span class="paste-json-error-preview">${escHtml(preview)}</span>
-      <span class="paste-json-error-chevron">▾</span>
+      <span class="from-json-error-chevron">▾</span>
     </div>
-    <div class="paste-json-error-list">${errorItems}${warningItems}</div>`;
+    <div class="from-json-error-list">${errorItems}${warningItems}</div>`;
   bar.classList.add('visible');
-  bar.classList.toggle('expanded', pasteJsonErrorListExpanded);
+  bar.classList.toggle('expanded', fromJsonErrorListExpanded);
 }
 
-function showPasteJsonError(message) {
-  const bar = document.getElementById('paste-json-error-bar');
+function showFromJsonError(message) {
+  const bar = document.getElementById('from-json-error-bar');
   if (!bar) return;
   bar.innerHTML = `
-    <div class="paste-json-error-summary">
-      <span class="paste-json-error-count">⚠ Error</span>
-      <span class="paste-json-error-preview">${escHtml(message)}</span>
+    <div class="from-json-error-summary">
+      <span class="from-json-error-count">⚠ Error</span>
+      <span class="from-json-error-preview">${escHtml(message)}</span>
     </div>`;
   bar.classList.add('visible');
   bar.classList.remove('expanded');
 }
 
-function togglePasteJsonErrorList() {
-  const bar = document.getElementById('paste-json-error-bar');
+function toggleFromJsonErrorList() {
+  const bar = document.getElementById('from-json-error-bar');
   if (!bar) return;
-  pasteJsonErrorListExpanded = !pasteJsonErrorListExpanded;
-  bar.classList.toggle('expanded', pasteJsonErrorListExpanded);
+  fromJsonErrorListExpanded = !fromJsonErrorListExpanded;
+  bar.classList.toggle('expanded', fromJsonErrorListExpanded);
 }
 
 function jumpToJsonError(offset) {
-  const ta = document.getElementById('paste-json-textarea');
+  const ta = document.getElementById('from-json-textarea');
   if (!ta || offset < 0) return;
   ta.focus();
   ta.setSelectionRange(offset, offset);
@@ -2125,36 +2172,38 @@ function jumpToJsonError(offset) {
   const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 19.2;
   const lineIndex  = ta.value.substring(0, offset).split('\n').length - 1;
   ta.scrollTop = Math.max(0, (lineIndex - 3) * lineHeight);
-  syncPasteJsonGutterScroll();
+  syncFromJsonGutterScroll();
 }
 
-function validatePasteJson() {
-  const ta        = document.getElementById('paste-json-textarea');
-  const createBtn = document.getElementById('paste-json-create-btn');
+function validateFromJson() {
+  const ta        = document.getElementById('from-json-textarea');
+  const createBtn = document.getElementById('from-json-create-btn');
+  const saveBtn   = document.getElementById('from-json-save-btn');
   if (!ta || !createBtn) return;
   const text = ta.value.trim();
-  pasteJsonErrors   = text ? getPasteJsonErrors(ta.value) : [];
+  fromJsonErrors   = text ? getFromJsonErrors(ta.value) : [];
   // Only run duplicate checks when the JSON is syntactically valid
-  pasteJsonWarnings = (text && !pasteJsonErrors.length) ? checkPasteJsonDuplicates(ta.value) : [];
-  updatePasteJsonHighlight(pasteJsonErrors, pasteJsonWarnings);
-  updatePasteJsonErrorBar(pasteJsonErrors, pasteJsonWarnings);
-  createBtn.disabled = !text || pasteJsonErrors.length > 0;
+  fromJsonWarnings = text ? checkFromJsonDuplicates(ta.value) : [];
+  updateFromJsonHighlight(fromJsonErrors, fromJsonWarnings);
+  updateFromJsonErrorBar(fromJsonErrors, fromJsonWarnings);
+  createBtn.disabled = !text || fromJsonErrors.length > 0;
+  if (saveBtn) saveBtn.disabled = !text;
 }
 
-function onPasteJsonInput() {
-  updatePasteJsonGutter();
-  validatePasteJson();
+function onFromJsonInput() {
+  updateFromJsonGutter();
+  validateFromJson();
 }
 
-function syncPasteJsonGutterScroll() {
-  const ta     = document.getElementById('paste-json-textarea');
-  const gutter = document.getElementById('paste-json-gutter');
-  const hl     = document.getElementById('paste-json-highlight-layer');
+function syncFromJsonGutterScroll() {
+  const ta     = document.getElementById('from-json-textarea');
+  const gutter = document.getElementById('from-json-gutter');
+  const hl     = document.getElementById('from-json-highlight-layer');
   if (ta && gutter) gutter.scrollTop = ta.scrollTop;
   if (ta && hl)    { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; }
 }
 
-function handlePasteJsonKeyDown(event) {
+function handleFromJsonKeyDown(event) {
   if (event.key === 'Tab') {
     event.preventDefault();
     const ta  = event.target;
@@ -2162,17 +2211,31 @@ function handlePasteJsonKeyDown(event) {
     const e   = ta.selectionEnd;
     ta.value  = ta.value.substring(0, s) + '  ' + ta.value.substring(e);
     ta.selectionStart = ta.selectionEnd = s + 2;
-    onPasteJsonInput();
+    onFromJsonInput();
   }
 }
 
-async function handlePasteJsonFileOpen(event) {
+function saveFromJsonAsFile() {
+  const text = document.getElementById('from-json-textarea')?.value || '';
+  if (!text.trim()) return;
+  let filename = 'entity.json';
+  try { filename = entityJsonFilename(JSON.parse(text)); } catch { /* use default */ }
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function handleFromJsonFileOpen(event) {
   const file = event.target.files[0];
   if (!file) return;
   try {
     const text = await file.text();
-    document.getElementById('paste-json-textarea').value = text;
-    onPasteJsonInput();
+    document.getElementById('from-json-textarea').value = text;
+    onFromJsonInput();
   } catch (err) {
     console.error('Failed to read file:', err);
   }
@@ -2191,14 +2254,14 @@ function applyClientTokenSubstitution(json) {
   json = json.replace(/"<new_uuid>"/g, () => '"' + crypto.randomUUID() + '"');
   // <unique_number> — zero-padded incrementing counter (module-scoped)
   json = json.replace(/"<unique_number>"/g,
-    () => '"' + String(++pasteJsonUniqueCounter).padStart(6, '0') + '"');
+    () => '"' + String(++fromJsonUniqueCounter).padStart(6, '0') + '"');
   return json;
 }
 
-async function createEntityFromPastedJson() {
-  const ta             = document.getElementById('paste-json-textarea');
-  const keepAlive      = document.getElementById('paste-json-keepalive').checked;
-  const behaviorId     = document.getElementById('paste-json-behavior')?.value || '';
+async function createEntityFromJson() {
+  const ta             = document.getElementById('from-json-textarea');
+  const keepAlive      = document.getElementById('from-json-keepalive').checked;
+  const behaviorId     = document.getElementById('from-json-behavior')?.value || '';
 
   let jsonText = ta.value.trim();
   if (!jsonText) return;
@@ -2209,16 +2272,16 @@ async function createEntityFromPastedJson() {
   try {
     entity = JSON.parse(jsonText);
   } catch (e) {
-    showPasteJsonError(e.message);
+    showFromJsonError(e.message);
     return;
   }
 
   // Inject spawn location if chosen
-  if (pasteJsonSpawnLat !== null && pasteJsonSpawnLng !== null) {
+  if (fromJsonSpawnLat !== null && fromJsonSpawnLng !== null) {
     entity.location          = entity.location          || {};
     entity.location.position = entity.location.position || {};
-    entity.location.position.latitudeDegrees  = pasteJsonSpawnLat;
-    entity.location.position.longitudeDegrees = pasteJsonSpawnLng;
+    entity.location.position.latitudeDegrees  = fromJsonSpawnLat;
+    entity.location.position.longitudeDegrees = fromJsonSpawnLng;
   }
 
   try {
@@ -2243,26 +2306,26 @@ async function createEntityFromPastedJson() {
     if (res.ok) {
       const data = await res.json();
       const entityId = data.entityId;
-      console.info(`Created entity '${entityId}' from pasted JSON${behaviorId ? ` with behavior '${behaviorId}'` : ''}`);
-      if (keepAlive && !behaviorId) startPasteJsonKeepAlive(entityId);
-      closePasteJsonModal();
+      console.info(`Created entity '${entityId}' from JSON${behaviorId ? ` with behavior '${behaviorId}'` : ''}`);
+      if (keepAlive && !behaviorId) startFromJsonKeepAlive(entityId);
+      closeFromJsonModal();
     } else {
       const err = await res.json().catch(() => ({}));
-      showPasteJsonError('Server error: ' + (err.message || res.status));
+      showFromJsonError('Server error: ' + (err.message || res.status));
     }
   } catch (err) {
-    showPasteJsonError('Request failed: ' + err.message);
+    showFromJsonError('Request failed: ' + err.message);
   }
 }
 
-function startPasteJsonKeepAlive(entityId) {
-  if (pasteJsonKeepAlives.has(entityId)) return;
+function startFromJsonKeepAlive(entityId) {
+  if (fromJsonKeepAlives.has(entityId)) return;
   const INTERVAL_MS      = 30_000; // refresh every 30 s
   const EXPIRY_EXTEND_S  = 300;    // extend expiry 5 min into the future
 
   const id = setInterval(async () => {
     const entry = entityMap.get(entityId);
-    if (!entry) { clearInterval(id); pasteJsonKeepAlives.delete(entityId); return; }
+    if (!entry) { clearInterval(id); fromJsonKeepAlives.delete(entityId); return; }
 
     const updated = JSON.parse(JSON.stringify(entry.entity));
     const nowIso  = new Date().toISOString();
@@ -2283,38 +2346,38 @@ function startPasteJsonKeepAlive(entityId) {
     }
   }, INTERVAL_MS);
 
-  pasteJsonKeepAlives.set(entityId, id);
+  fromJsonKeepAlives.set(entityId, id);
 }
 
-function beginPasteJsonSpawnPick() {
-  document.getElementById('paste-json-modal').classList.remove('visible');
+function beginFromJsonSpawnPick() {
+  document.getElementById('from-json-modal').classList.remove('visible');
 
-  if (pasteJsonSpawnPickHandler) map.off('click', pasteJsonSpawnPickHandler);
+  if (fromJsonSpawnPickHandler) map.off('click', fromJsonSpawnPickHandler);
 
   const banner = document.getElementById('map-pick-banner');
   if (banner) banner.textContent = 'Click the map to set spawn location · Esc to cancel';
   document.getElementById('map-wrapper').classList.add('picking');
   banner?.classList.add('visible');
 
-  pasteJsonSpawnPickHandler = (e) => {
-    pasteJsonSpawnPickHandler = null;
+  fromJsonSpawnPickHandler = (e) => {
+    fromJsonSpawnPickHandler = null;
     document.getElementById('map-wrapper').classList.remove('picking');
     document.getElementById('map-pick-banner')?.classList.remove('visible');
     resetBannerText();
 
-    pasteJsonSpawnLat = e.latlng.lat;
-    pasteJsonSpawnLng = e.latlng.lng;
+    fromJsonSpawnLat = e.latlng.lat;
+    fromJsonSpawnLng = e.latlng.lng;
 
-    injectSpawnLocationIntoEditor(pasteJsonSpawnLat, pasteJsonSpawnLng);
-    updatePasteJsonSpawnBtn();
+    injectSpawnLocationIntoEditor(fromJsonSpawnLat, fromJsonSpawnLng);
+    updateFromJsonSpawnBtn();
 
-    document.getElementById('paste-json-modal').classList.add('visible');
+    document.getElementById('from-json-modal').classList.add('visible');
   };
-  map.once('click', pasteJsonSpawnPickHandler);
+  map.once('click', fromJsonSpawnPickHandler);
 }
 
 function injectSpawnLocationIntoEditor(lat, lng) {
-  const ta  = document.getElementById('paste-json-textarea');
+  const ta  = document.getElementById('from-json-textarea');
   const text = ta.value.trim();
   if (!text) return;
 
@@ -2336,11 +2399,11 @@ function injectSpawnLocationIntoEditor(lat, lng) {
     updated = updated.replace(/("longitudeDegrees"\s*:\s*)[^\s,\n}]+/, (_, p) => p + lngVal);
     ta.value = updated;
   }
-  onPasteJsonInput();
+  onFromJsonInput();
 }
 
-function updatePasteJsonBehaviorSelect() {
-  const sel = document.getElementById('paste-json-behavior');
+function updateFromJsonBehaviorSelect() {
+  const sel = document.getElementById('from-json-behavior');
   if (!sel) return;
   const previous = sel.value;
   while (sel.options.length > 1) sel.remove(1);
@@ -2356,11 +2419,11 @@ function updatePasteJsonBehaviorSelect() {
   if (previous && [...sel.options].some(o => o.value === previous)) sel.value = previous;
 }
 
-function updatePasteJsonSpawnBtn() {
-  const btn = document.getElementById('paste-json-spawn-btn');
+function updateFromJsonSpawnBtn() {
+  const btn = document.getElementById('from-json-spawn-btn');
   if (!btn) return;
-  if (pasteJsonSpawnLat !== null && pasteJsonSpawnLng !== null) {
-    btn.textContent = `${pasteJsonSpawnLat.toFixed(4)}°, ${pasteJsonSpawnLng.toFixed(4)}°`;
+  if (fromJsonSpawnLat !== null && fromJsonSpawnLng !== null) {
+    btn.textContent = `${fromJsonSpawnLat.toFixed(4)}°, ${fromJsonSpawnLng.toFixed(4)}°`;
     btn.classList.add('location-set');
   } else {
     btn.textContent = 'Choose Spawn Location';
@@ -2368,8 +2431,8 @@ function updatePasteJsonSpawnBtn() {
   }
 }
 
-function generatePasteJsonEntityId() {
-  const ta  = document.getElementById('paste-json-textarea');
+function generateFromJsonEntityId() {
+  const ta  = document.getElementById('from-json-textarea');
   const newId = crypto.randomUUID();
 
   // Prefer parse → set → re-stringify when the JSON is valid.
@@ -2388,8 +2451,60 @@ function generatePasteJsonEntityId() {
       ta.value = replaced;
     }
   }
-  onPasteJsonInput();
+  onFromJsonInput();
 }
+
+// ── Insert Token ──────────────────────────────────────────────────────────
+
+let fromJsonSavedSelection = null;
+
+const FROM_JSON_TOKENS = [
+  { token: '<new_uuid>',      label: '<new_uuid>',      desc: 'A new random UUID'             },
+  { token: '<now>',           label: '<now>',           desc: 'Current UTC timestamp'         },
+  { token: '<now+300s>',      label: '<now+300s>',      desc: 'Current time + 5 minutes'      },
+  { token: '<now+3600s>',     label: '<now+3600s>',     desc: 'Current time + 1 hour'         },
+  { token: '<now+86400s>',    label: '<now+86400s>',    desc: 'Current time + 24 hours'       },
+  { token: '<unique_number>', label: '<unique_number>', desc: 'Auto-incrementing padded number'},
+];
+
+function toggleFromJsonTokenMenu(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('from-json-token-menu');
+  if (!menu) return;
+  if (menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    return;
+  }
+  // Save the textarea selection before focus leaves it
+  const ta = document.getElementById('from-json-textarea');
+  if (ta) fromJsonSavedSelection = { start: ta.selectionStart, end: ta.selectionEnd };
+
+  menu.innerHTML = FROM_JSON_TOKENS.map((t, i) =>
+    `<button class="from-json-token-item" data-token-idx="${i}">
+      <div>${escHtml(t.label)}</div>
+      <div class="from-json-token-item-desc">${escHtml(t.desc)}</div>
+    </button>`
+  ).join('');
+  menu.querySelectorAll('.from-json-token-item').forEach(btn => {
+    btn.addEventListener('click', () => insertFromJsonToken(FROM_JSON_TOKENS[+btn.dataset.tokenIdx].token));
+  });
+  menu.classList.add('open');
+}
+
+function insertFromJsonToken(token) {
+  document.getElementById('from-json-token-menu')?.classList.remove('open');
+  const ta = document.getElementById('from-json-textarea');
+  if (!ta) return;
+  const saved = fromJsonSavedSelection;
+  const start = saved ? saved.start : ta.selectionStart;
+  const end   = saved ? saved.end   : ta.selectionEnd;
+  fromJsonSavedSelection = null;
+  ta.focus();
+  ta.setSelectionRange(start, end);
+  document.execCommand('insertText', false, token);
+  onFromJsonInput();
+}
+
 
 // Add Entity — template dropdown + map placement
 // -------------------------------------------------------------------------
@@ -2402,7 +2517,7 @@ async function loadEntityTemplates() {
     if (!res.ok) { console.error('Failed to load templates:', res.status); return; }
     entityTemplates = await res.json();
     renderAddEntityMenu();
-    updatePasteJsonBehaviorSelect();
+    updateFromJsonBehaviorSelect();
   } catch (err) {
     console.error('Failed to load templates:', err);
   }
@@ -2476,7 +2591,7 @@ function renderAddEntityMenu() {
   menu.innerHTML = '<div class="add-entity-label">Add Entity</div>'
     + categoryRows
     + divider
-    + '<button class="add-entity-paste-btn" onclick="openPasteJsonModal()">Paste JSON\u2026</button>';
+    + '<button class="add-entity-from-json-btn" onclick="openFromJsonModal()">From JSON\u2026</button>';
 }
 
 let _flyoutCloseTimer = null;
@@ -2642,14 +2757,14 @@ function spawnFromContextMenu(templateId, _displayName) {
 // Cancel placement on Escape (alongside existing escape handling)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (pasteJsonSpawnPickHandler) {
-      map.off('click', pasteJsonSpawnPickHandler);
-      pasteJsonSpawnPickHandler = null;
+    if (fromJsonSpawnPickHandler) {
+      map.off('click', fromJsonSpawnPickHandler);
+      fromJsonSpawnPickHandler = null;
       document.getElementById('map-wrapper').classList.remove('picking');
       document.getElementById('map-pick-banner')?.classList.remove('visible');
       resetBannerText();
-      // Re-show the paste JSON modal after cancelling location pick
-      document.getElementById('paste-json-modal').classList.add('visible');
+      // Re-show the from JSON modal after cancelling location pick
+      document.getElementById('from-json-modal').classList.add('visible');
     }
     if (spawnPickHandler) {
       map.off('click', spawnPickHandler);

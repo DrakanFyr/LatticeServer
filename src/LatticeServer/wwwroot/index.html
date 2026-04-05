@@ -90,7 +90,9 @@
     <div class="json-modal-box">
       <div class="json-modal-header">
         <span class="json-modal-title">Entity JSON</span>
+        <button class="json-modal-copy" onclick="cloneEntityJson()">Clone</button>
         <button class="json-modal-copy" onclick="copyEntityJson()">Copy</button>
+        <button class="json-modal-copy" onclick="saveEntityJsonAsFile()">Save As…</button>
         <button class="json-modal-close" onclick="closeEntityJsonModal()">✕</button>
       </div>
       <div class="json-modal-body">
@@ -99,40 +101,45 @@
     </div>
   </div>
 
-  <!-- Paste JSON modal -->
-  <div id="paste-json-modal" onclick="handlePasteJsonModalBackdropClick(event)">
-    <div class="paste-json-box">
+  <!-- From JSON modal -->
+  <div id="from-json-modal" onclick="handleFromJsonModalBackdropClick(event)">
+    <div class="from-json-box">
       <div class="json-modal-header">
-        <span class="json-modal-title">Paste JSON</span>
-        <label class="paste-json-browse-btn">
+        <span class="json-modal-title">From JSON</span>
+        <label class="from-json-browse-btn">
           Browse
-          <input type="file" id="paste-json-file-input" accept=".json,application/json" style="display:none" onchange="handlePasteJsonFileOpen(event)">
+          <input type="file" id="from-json-file-input" accept=".json,application/json" style="display:none" onchange="handleFromJsonFileOpen(event)">
         </label>
-        <button class="json-modal-close" onclick="closePasteJsonModal()">✕</button>
+        <button class="from-json-browse-btn" id="from-json-save-btn" onclick="saveFromJsonAsFile()" disabled>Save As…</button>
+        <button class="json-modal-close" onclick="closeFromJsonModal()">✕</button>
       </div>
-      <div class="paste-json-editor-wrap">
-        <div class="paste-json-gutter" id="paste-json-gutter">1</div>
-        <div class="paste-json-code-container">
-          <div class="paste-json-highlight-layer" id="paste-json-highlight-layer" aria-hidden="true"></div>
-          <textarea id="paste-json-textarea" class="paste-json-textarea" spellcheck="false" autocomplete="off" placeholder="Paste entity JSON here…" oninput="onPasteJsonInput()" onscroll="syncPasteJsonGutterScroll()" onkeydown="handlePasteJsonKeyDown(event)"></textarea>
+      <div class="from-json-editor-wrap">
+        <div class="from-json-gutter" id="from-json-gutter">1</div>
+        <div class="from-json-code-container">
+          <div class="from-json-highlight-layer" id="from-json-highlight-layer" aria-hidden="true"></div>
+          <textarea id="from-json-textarea" class="from-json-textarea" spellcheck="false" autocomplete="off" placeholder="Paste entity JSON here…" oninput="onFromJsonInput()" onscroll="syncFromJsonGutterScroll()" onkeydown="handleFromJsonKeyDown(event)"></textarea>
         </div>
       </div>
-      <div class="paste-json-error-bar" id="paste-json-error-bar"></div>
-      <div class="paste-json-footer">
-        <button class="paste-json-spawn-btn" id="paste-json-spawn-btn" onclick="beginPasteJsonSpawnPick()">Choose Spawn Location</button>
-        <button class="paste-json-gen-id-btn" onclick="generatePasteJsonEntityId()">Generate New Id</button>
-        <div class="paste-json-footer-right">
-          <label class="paste-json-keepalive-label">
-            <input type="checkbox" id="paste-json-keepalive">
+      <div class="from-json-error-bar" id="from-json-error-bar"></div>
+      <div class="from-json-footer">
+        <button class="from-json-spawn-btn" id="from-json-spawn-btn" onclick="beginFromJsonSpawnPick()">Choose Spawn Location</button>
+        <button class="from-json-gen-id-btn" onclick="generateFromJsonEntityId()">Generate New Id</button>
+        <div class="from-json-token-wrap">
+          <button class="from-json-token-btn" id="from-json-token-btn" onmousedown="event.preventDefault()" onclick="toggleFromJsonTokenMenu(event)">Insert Token</button>
+          <div class="from-json-token-menu" id="from-json-token-menu" onmousedown="event.preventDefault()"></div>
+        </div>
+        <div class="from-json-footer-right">
+          <label class="from-json-keepalive-label">
+            <input type="checkbox" id="from-json-keepalive">
             Keep alive
           </label>
-          <div class="paste-json-behavior-wrap">
-            <label class="paste-json-behavior-label" for="paste-json-behavior">Behavior</label>
-            <select id="paste-json-behavior" class="paste-json-behavior-select">
+          <div class="from-json-behavior-wrap">
+            <label class="from-json-behavior-label" for="from-json-behavior">Behavior</label>
+            <select id="from-json-behavior" class="from-json-behavior-select">
               <option value="">None</option>
             </select>
           </div>
-          <button class="paste-json-create-btn" id="paste-json-create-btn" onclick="createEntityFromPastedJson()" disabled>Create Entity</button>
+          <button class="from-json-create-btn" id="from-json-create-btn" onclick="createEntityFromJson()" disabled>Create Entity</button>
         </div>
       </div>
     </div>

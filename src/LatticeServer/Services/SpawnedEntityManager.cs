@@ -287,7 +287,7 @@ public class SpawnedEntityManager : IDisposable
     // Location resolution + JSON merging
     // -------------------------------------------------------------------------
 
-    private static SpawnLocation? ResolveLocation(SpawnOptions? options, TemplateConfig config)
+    private static SpawnLocation? ResolveLocation(SpawnOptions? options, TemplateConfig? config)
     {
         if (options?.LatitudeDegrees.HasValue == true && options.LongitudeDegrees.HasValue)
         {
@@ -296,7 +296,7 @@ public class SpawnedEntityManager : IDisposable
                 options.LongitudeDegrees.Value,
                 options.AltitudeHaeMeters);
         }
-        return config.DefaultLocation;
+        return config?.DefaultLocation;
     }
 
     private static string MergeLocation(string json, SpawnLocation loc)
