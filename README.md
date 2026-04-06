@@ -17,6 +17,8 @@ LatticeServer/
 ├── LatticeSDK/                    # Protobuf definitions and API documentation
 │   ├── protos/
 │   └── docs/
+├── LatticeSDK.Templates/          # SDK for authoring templated entities (behavior DLLs)
+├── LatticeTemplateSDK/            # Reference template — simulated UAV
 ├── src/
 │   ├── LatticeServer/             # Main ASP.NET Core server
 │   ├── LatticeServer.Tests/       # xUnit integration tests
@@ -24,6 +26,18 @@ LatticeServer/
 │   └── LatticeClientTest/         # Client test suite
 └── LatticeServer.sln
 ```
+
+### Templated Entities
+
+LatticeServer supports **templated entities** — reusable entity blueprints that can be spawned from the UI, simulated with live C# behavior, and assigned tasks. See the [Template Authoring Guide](LatticeSDK.Templates/README.md) for full documentation on:
+
+- The template folder structure (`entity.json`, `config.json`, `behavior.dll`, `task-configurations.json`)
+- Entity JSON tokens (`<new_uuid>`, `<now+Xs>`, etc.)
+- Writing a behavior DLL with `ITaskableEntity`
+- Defining custom task types with protobuf and `ICustomTaskTypes`
+- Customising the task form UI with `task-configurations.json`
+
+The `LatticeTemplateSDK/` project is the reference implementation (a simulated UAV that navigates to task objectives).
 
 ## Quick Start
 

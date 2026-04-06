@@ -103,6 +103,7 @@ public class TemplateRegistry : IHostedService, IDisposable
             // Whole template folder deleted
             if (_templates.TryRemove(templateId, out var old))
             {
+                ProtobufJsonConverter.UnregisterTypes(templateId);
                 old.LoadContext?.Unload();
                 _logger.LogInformation("Template '{Id}' removed (folder deleted).", templateId);
             }
@@ -135,6 +136,7 @@ public class TemplateRegistry : IHostedService, IDisposable
             {
                 if (_templates.TryRemove(key, out var old))
                 {
+                    ProtobufJsonConverter.UnregisterTypes(key);
                     old.LoadContext?.Unload();
                     _logger.LogInformation("Template '{Id}' removed (folder gone on rescan).", key);
                 }
@@ -161,6 +163,7 @@ public class TemplateRegistry : IHostedService, IDisposable
         {
             if (_templates.TryRemove(templateId, out var old))
             {
+                ProtobufJsonConverter.UnregisterTypes(templateId);
                 old.LoadContext?.Unload();
                 _logger.LogInformation("Template '{Id}' removed.", templateId);
             }
@@ -218,9 +221,18 @@ public class TemplateRegistry : IHostedService, IDisposable
             _logger.LogWarning("Template '{Id}': no displayName set in config.json. The template ID will be shown in the UI.", templateId);
         }
 
+        // Unload previous context if reloading (must happen before RegisterTypes
+        // so the new registration isn't immediately removed by UnregisterTypes)
+        if (_templates.TryGetValue(templateId, out var existing))
+        {
+            ProtobufJsonConverter.UnregisterTypes(templateId);
+            existing.LoadContext?.Unload();
+        }
+
         // Load behavior DLL if present
         Type? behaviorType = null;
         AssemblyLoadContext? loadContext = null;
+        var customDescriptors = new List<Google.Protobuf.Reflection.MessageDescriptor>();
         var behaviorDllPath = Path.Combine(folderPath, "behavior.dll");
         if (File.Exists(behaviorDllPath))
         {
@@ -232,22 +244,49 @@ public class TemplateRegistry : IHostedService, IDisposable
                     .Where(t => !t.IsAbstract && !t.IsInterface && typeof(ITaskableEntity).IsAssignableFrom(t))
                     .ToList();
 
-                if (candidates.Count == 0)
+                // Scan for ICustomTaskTypes implementations
+                var customTaskTypesCandidates = assembly.GetTypes()
+                    .Where(t => !t.IsAbstract && !t.IsInterface && typeof(ICustomTaskTypes).IsAssignableFrom(t))
+                    .ToList();
+
+                foreach (var candidateType in customTaskTypesCandidates)
                 {
-                    _logger.LogWarning("Template '{Id}': behavior.dll has no ITaskableEntity implementation. Treating as non-taskable.", templateId);
-                    loadContext.Unload();
-                    loadContext = null;
+                    try
+                    {
+                        var instance = (ICustomTaskTypes)Activator.CreateInstance(candidateType)!;
+                        customDescriptors.AddRange(instance.GetTaskDescriptors());
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Template '{Id}': failed to instantiate ICustomTaskTypes implementor '{Type}'.", templateId, candidateType.FullName);
+                    }
                 }
-                else if (candidates.Count > 1)
+
+                if (customDescriptors.Count > 0)
+                {
+                    ProtobufJsonConverter.RegisterTypes(templateId, customDescriptors);
+                    _logger.LogInformation("Template '{Id}': registered {Count} custom task descriptor(s).", templateId, customDescriptors.Count);
+                }
+
+                // Determine ITaskableEntity behavior type
+                if (candidates.Count > 1)
                 {
                     _logger.LogWarning("Template '{Id}': behavior.dll has {Count} ITaskableEntity implementations (ambiguous). Treating as non-taskable.", templateId, candidates.Count);
-                    loadContext.Unload();
-                    loadContext = null;
                 }
-                else
+                else if (candidates.Count == 1)
                 {
                     behaviorType = candidates[0];
                     _logger.LogInformation("Template '{Id}': loaded behavior type '{Type}'.", templateId, behaviorType.FullName);
+                }
+
+                bool hasTaskable = candidates.Count == 1;
+                bool hasCustomTypes = customTaskTypesCandidates.Count > 0;
+
+                if (!hasTaskable && !hasCustomTypes)
+                {
+                    _logger.LogWarning("Template '{Id}': behavior.dll has no ITaskableEntity or ICustomTaskTypes. Unloading.", templateId);
+                    loadContext.Unload();
+                    loadContext = null;
                 }
             }
             catch (Exception ex)
@@ -258,10 +297,23 @@ public class TemplateRegistry : IHostedService, IDisposable
             }
         }
 
-        // Unload previous context if reloading
-        if (_templates.TryGetValue(templateId, out var existing))
+        // Load task-configurations.json if present
+        string? rawTaskConfigurationsJson = null;
+        var taskConfigurationsPath = Path.Combine(folderPath, "task-configurations.json");
+        if (File.Exists(taskConfigurationsPath))
         {
-            existing.LoadContext?.Unload();
+            try
+            {
+                rawTaskConfigurationsJson = await File.ReadAllTextAsync(taskConfigurationsPath);
+                using var doc = JsonDocument.Parse(rawTaskConfigurationsJson);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("task-configurations.json must be a JSON array.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Template '{Id}': failed to parse task-configurations.json; overrides ignored.", templateId);
+                rawTaskConfigurationsJson = null;
+            }
         }
 
         var definition = new TemplateDefinition(
@@ -270,7 +322,9 @@ public class TemplateRegistry : IHostedService, IDisposable
             RawEntityJson: rawEntityJson,
             Config: config,
             BehaviorType: behaviorType,
-            LoadContext: loadContext);
+            LoadContext: loadContext,
+            CustomTaskDescriptors: customDescriptors,
+            RawTaskConfigurationsJson: rawTaskConfigurationsJson);
 
         _templates[templateId] = definition;
 
@@ -345,4 +399,6 @@ public record TemplateDefinition(
     string RawEntityJson,
     LatticeSDK.Templates.TemplateConfig Config,
     Type? BehaviorType,
-    AssemblyLoadContext? LoadContext);
+    AssemblyLoadContext? LoadContext,
+    IReadOnlyList<Google.Protobuf.Reflection.MessageDescriptor> CustomTaskDescriptors,
+    string? RawTaskConfigurationsJson);

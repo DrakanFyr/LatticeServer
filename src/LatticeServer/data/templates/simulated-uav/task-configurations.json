@@ -1,0 +1,21 @@
+[
+  {
+    "typeUrl": "type.googleapis.com/lattice.tasks.v1.FlyTo",
+    "displayName": "Fly To",
+    "description": "Fly the UAV to a specific geographic position.",
+    "executionTag": "Flying",
+    "fieldOverrides": {
+      "latitude_degrees": { "hidden": true },
+      "longitude_degrees": { "hidden": true },
+      "altitude_hae_meters": { "hidden": true },
+      "_location": {
+        "label": "Destination",
+        "type": "objective_point",
+        "required": true,
+        "latKey": "latitude_degrees",
+        "lonKey": "longitude_degrees",
+        "altKey": "altitude_hae_meters"
+      }
+    }
+  }
+]

@@ -11,6 +11,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.27.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.64.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="protos/**/*.proto" GrpcServices="None" ProtoRoot="protos" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LatticeSDK.Templates\LatticeSDK.Templates.csproj" />
   </ItemGroup>
 
@@ -24,6 +33,10 @@
     <Copy SourceFiles="$(OutputPath)behavior.pdb" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" Condition="Exists('$(OutputPath)behavior.pdb')" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)entity.json" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)config.json" DestinationFolder="$(_TemplateDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)task-configurations.json"
+          DestinationFolder="$(_TemplateDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(MSBuildThisFileDirectory)task-configurations.json')" />
     <Message Text="Deployed template '$(TemplateId)' to $(_TemplateDir)" Importance="high" />
   </Target>
 

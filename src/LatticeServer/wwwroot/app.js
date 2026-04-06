@@ -66,6 +66,55 @@ async function loadTaskTypeConfig() {
   } catch { /* non-fatal: fall back to raw type names */ }
 }
 
+// -------------------------------------------------------------------------
+// Entity → Template mapping  —  entityId -> templateId
+// -------------------------------------------------------------------------
+const entityTemplateMap = new Map();
+
+async function refreshEntityTemplateMap() {
+  try {
+    const res = await fetch('/api/v1/templates/instances');
+    if (!res.ok) return;
+    const instances = await res.json();
+    entityTemplateMap.clear();
+    for (const inst of instances) {
+      if (inst.entityId && inst.templateId) entityTemplateMap.set(inst.entityId, inst.templateId);
+    }
+  } catch { /* non-fatal */ }
+}
+
+// -------------------------------------------------------------------------
+// Dynamic task configuration loader  —  lazy per-template fetch
+// -------------------------------------------------------------------------
+const loadedTemplateConfigs = new Set();
+
+async function loadTemplateTaskConfigurations(templateId) {
+  if (!templateId || loadedTemplateConfigs.has(templateId)) return false;
+  loadedTemplateConfigs.add(templateId);
+
+  try {
+    const res = await fetch(`/api/v1/templates/${encodeURIComponent(templateId)}/task-configurations`);
+    if (!res.ok) { loadedTemplateConfigs.delete(templateId); return false; }
+    const configs = await res.json();
+    let added = false;
+    for (const config of configs) {
+      if (!config.typeUrl || !config.fields) continue;
+      TASK_SCHEMAS[config.typeUrl] = { fields: config.fields };
+      taskTypeConfig.set(config.typeUrl, {
+        type:         config.typeUrl,
+        displayName:  config.displayName || config.typeUrl.split('.').pop(),
+        description:  config.description  || null,
+        executionTag: config.executionTag || null,
+      });
+      added = true;
+    }
+    return added;
+  } catch {
+    loadedTemplateConfigs.delete(templateId);
+    return false;
+  }
+}
+
 function getTaskDisplayName(url) {
   return taskTypeConfig.get(url)?.displayName || (url ? url.split('.').pop() : null);
 }
@@ -220,6 +269,12 @@ function renderDetailView() {
 
   const entry = entityMap.get(selectedEntityId);
   if (!entry) { clearSelection(); return; }
+
+  // Fire-and-forget: pre-load custom task configs for this entity's template
+  const _tplId = entityTemplateMap.get(selectedEntityId);
+  if (_tplId) {
+    loadTemplateTaskConfigurations(_tplId).then(added => { if (added) scheduleRender(); });
+  }
 
   listEl.style.display = 'none';
   backBtn.style.display = 'flex';
@@ -814,8 +869,10 @@ const TASK_SCHEMAS = {
 // -------------------------------------------------------------------------
 // Task wizard — state management
 // -------------------------------------------------------------------------
-function openTaskWizard(entityId) {
+async function openTaskWizard(entityId) {
   stopMapPick();
+  const templateId = entityTemplateMap.get(entityId);
+  if (templateId) await loadTemplateTaskConfigurations(templateId);
   taskWizardActive   = true;
   taskWizardEntityId = entityId;
   taskWizardSpecUrl  = null;
@@ -851,7 +908,7 @@ function pickTaskTypeFromDropdown(entityId, specUrl) {
   taskWizardSpecUrl  = specUrl;
   taskFormValues     = {};
   const schema = TASK_SCHEMAS[specUrl];
-  const firstObjField = schema?.fields.find(f => f.type === 'objective');
+  const firstObjField = schema?.fields.find(f => isObjectiveType(f.type));
   if (firstObjField) {
     enterMapPickMode();
     setMapPickField(firstObjField.key);
@@ -866,7 +923,7 @@ function selectTaskType(specUrl) {
   taskWizardSpecUrl = specUrl;
   taskFormValues    = {};
   const schema = TASK_SCHEMAS[specUrl];
-  const firstObjField = schema?.fields.find(f => f.type === 'objective');
+  const firstObjField = schema?.fields.find(f => isObjectiveType(f.type));
   if (firstObjField) {
     enterMapPickMode();
     setMapPickField(firstObjField.key);
@@ -947,15 +1004,16 @@ function renderFieldHtml(field) {
   const domId  = 'tf-' + field.key.replace(/\./g, '__');
   const reqStar = field.required ? ' <span class="required">*</span>' : '';
 
-  if (field.type === 'objective') {
+  if (field.type === 'objective' || field.type === 'objective_point') {
     const val         = taskFormValues[field.key];
     const isPickingMap = mapPickField === field.key;
+    const pointOnly   = field.type === 'objective_point';
 
     let valueText  = 'Not set';
     let valueCls   = 'obj-field-value';
     let selValue   = '';
 
-    if (val?.type === 'entity' && val.entityId) {
+    if (!pointOnly && val?.type === 'entity' && val.entityId) {
       const e   = entityMap.get(val.entityId);
       valueText = getDisplayName(e?.entity || { entityId: val.entityId });
       valueCls += ' set';
@@ -963,6 +1021,24 @@ function renderFieldHtml(field) {
     } else if (val?.type === 'point') {
       valueText = `${val.lat.toFixed(5)}°, ${val.lon.toFixed(5)}°`;
       valueCls += ' set';
+    }
+
+    const altRow = val?.type === 'point' ? `
+      <div class="obj-alt-row">
+        <span class="obj-alt-label">Alt (m)</span>
+        <input class="form-input obj-alt-input" type="number" step="any" value="${val.alt ?? 0}"
+          oninput="setObjectiveAlt('${escapeHtml(field.key)}', this.value)" />
+      </div>` : '';
+
+    if (pointOnly) {
+      return `<div class="form-field">
+        <div class="form-label">${isPickingMap ? '<span class="map-pick-indicator"></span>' : ''}${escapeHtml(field.label)}${reqStar}</div>
+        <div class="${valueCls}">${escapeHtml(valueText)}</div>
+        ${altRow}
+        <div class="obj-btns">
+          <button class="obj-btn-map${isPickingMap ? ' active' : ''}" style="flex:1" onclick="toggleMapPick('${escapeHtml(field.key)}')">📍 Choose on Map</button>
+        </div>
+      </div>`;
     }
 
     const opts = [...entityMap.values()]
@@ -973,13 +1049,6 @@ function renderFieldHtml(field) {
         const sel  = selValue === eid ? ' selected' : '';
         return `<option value="${escapeHtml(eid)}"${sel}>${escapeHtml(name)}</option>`;
       }).join('');
-
-    const altRow = val?.type === 'point' ? `
-      <div class="obj-alt-row">
-        <span class="obj-alt-label">Alt (m AGL)</span>
-        <input class="form-input obj-alt-input" type="number" step="any" value="${val.alt ?? 0}"
-          oninput="setObjectiveAlt('${escapeHtml(field.key)}', this.value)" />
-      </div>` : '';
 
     return `<div class="form-field">
       <div class="form-label">${isPickingMap ? '<span class="map-pick-indicator"></span>' : ''}${escapeHtml(field.label)}${reqStar}</div>
@@ -1019,6 +1088,8 @@ function renderFieldHtml(field) {
 // -------------------------------------------------------------------------
 // Task wizard — objective + map pick
 // -------------------------------------------------------------------------
+function isObjectiveType(type) { return type === 'objective' || type === 'objective_point'; }
+
 function setObjectiveAlt(fieldKey, altStr) {
   const val = taskFormValues[fieldKey];
   if (val?.type === 'point') val.alt = parseFloat(altStr) || 0;
@@ -1051,7 +1122,7 @@ function clearObjectiveMarkers() {
 
 function updateObjectiveMarkers() {
   const schema = TASK_SCHEMAS[taskWizardSpecUrl];
-  const fields = schema?.fields.filter(f => f.type === 'objective') || [];
+  const fields = schema?.fields.filter(f => isObjectiveType(f.type)) || [];
   const activeKeys = new Set();
 
   for (const field of fields) {
@@ -1111,9 +1182,13 @@ function setMapPickField(fieldKey) {
   if (mapPickHandler) { map.off('click', mapPickHandler); mapPickHandler = null; }
   mapPickField = fieldKey;
   const schema = TASK_SCHEMAS[taskWizardSpecUrl];
-  const label  = schema?.fields.find(f => f.key === fieldKey)?.label || fieldKey;
+  const field  = schema?.fields.find(f => f.key === fieldKey);
+  const label  = field?.label || fieldKey;
   const banner = document.getElementById('map-pick-banner');
-  if (banner) banner.textContent = `Picking "${label}" · click an entity marker or the map to place a point · Esc to cancel`;
+  const hint   = field?.type === 'objective_point'
+    ? `Picking "${label}" · click the map or an entity to set coordinates · Esc to cancel`
+    : `Picking "${label}" · click an entity marker or the map to place a point · Esc to cancel`;
+  if (banner) banner.textContent = hint;
   mapPickHandler = (e) => {
     const { lat, lng } = e.latlng;
     const prev = mapPickField;
@@ -1129,7 +1204,7 @@ function setMapPickField(fieldKey) {
 function advanceMapPick(fromFieldKey) {
   const schema = TASK_SCHEMAS[taskWizardSpecUrl];
   if (!schema) { stopMapPick(); return; }
-  const objFields = schema.fields.filter(f => f.type === 'objective');
+  const objFields = schema.fields.filter(f => isObjectiveType(f.type));
   if (!objFields.length) { stopMapPick(); return; }
   const idx = objFields.findIndex(f => f.key === fromFieldKey);
   const nextIdx = (idx + 1) % objFields.length;
@@ -1161,7 +1236,7 @@ function saveFormInputs() {
   const schema = TASK_SCHEMAS[taskWizardSpecUrl];
   if (!schema) return;
   for (const field of schema.fields) {
-    if (field.type === 'objective') {
+    if (isObjectiveType(field.type)) {
       // Persist any in-progress altitude edit for point objectives.
       const altEl = document.querySelector(`.obj-alt-input[oninput*="'${field.key}'"]`);
       if (altEl && taskFormValues[field.key]?.type === 'point') {
@@ -1218,6 +1293,19 @@ function buildTaskPayload() {
         objJson = { point: { referenceName: 'Selected Point', lla: { lat: val.lat, lon: val.lon, alt: val.alt || 0 } } };
       }
       if (objJson !== null) setNestedKey(spec, key, objJson);
+      continue;
+    }
+
+    if (field.type === 'objective_point') {
+      const val = taskFormValues[key];
+      if (val?.type === 'point' && val.lat !== undefined) {
+        const latKey = field.latKey || 'latitude_degrees';
+        const lonKey = field.lonKey || 'longitude_degrees';
+        const altKey = field.altKey || 'altitude_hae_meters';
+        setNestedKey(spec, latKey, val.lat);
+        setNestedKey(spec, lonKey, val.lon);
+        setNestedKey(spec, altKey, val.alt || 0);
+      }
       continue;
     }
 
@@ -1652,14 +1740,36 @@ function upsertEntity(entity, eventTime) {
       const marker = L.marker(latlng, { icon: makeMarkerIcon(id === selectedEntityId) });
       marker.on('click', (e) => {
         if (mapPickField) {
-          L.DomEvent.stopPropagation(e);
-          saveFormInputs();
-          const prev = mapPickField;
-          taskFormValues[prev] = { type: 'entity', entityId: id };
-          updateObjectiveMarkers();
-          advanceMapPick(prev);
-          renderTaskWizardContent();
-        } else if (!taskWizardActive) {
+          const _pickSchema = TASK_SCHEMAS[taskWizardSpecUrl];
+          const _pickField = _pickSchema?.fields.find(f => f.key === mapPickField);
+          if (_pickField?.type === 'objective_point') {
+            const _entry = entityMap.get(id);
+            const _ll = _entry ? getLatLng(_entry.entity) : null;
+            if (_ll) {
+              L.DomEvent.stopPropagation(e);
+              // Cancel the pending map.once('click') so it doesn't also fire
+              if (mapPickHandler) { map.off('click', mapPickHandler); mapPickHandler = null; }
+              saveFormInputs();
+              const prev = mapPickField;
+              const alt = _entry.entity?.location?.position?.altitudeHaeMeters || 0;
+              taskFormValues[prev] = { type: 'point', lat: _ll[0], lon: _ll[1], alt };
+              updateObjectiveMarkers();
+              advanceMapPick(prev);
+              renderTaskWizardContent();
+              return;
+            }
+          } else {
+            L.DomEvent.stopPropagation(e);
+            saveFormInputs();
+            const prev = mapPickField;
+            taskFormValues[prev] = { type: 'entity', entityId: id };
+            updateObjectiveMarkers();
+            advanceMapPick(prev);
+            renderTaskWizardContent();
+            return;
+          }
+        }
+        if (!taskWizardActive) {
           selectEntity(id);
         }
       });
@@ -2308,6 +2418,7 @@ async function createEntityFromJson() {
       const entityId = data.entityId;
       console.info(`Created entity '${entityId}' from JSON${behaviorId ? ` with behavior '${behaviorId}'` : ''}`);
       if (keepAlive && !behaviorId) startFromJsonKeepAlive(entityId);
+      if (behaviorId) refreshEntityTemplateMap();
       closeFromJsonModal();
     } else {
       const err = await res.json().catch(() => ({}));
@@ -2698,6 +2809,7 @@ async function spawnEntityAtLocation(templateId, lat, lng) {
     if (res.ok) {
       const data = await res.json();
       console.info(`Spawned entity '${data.entityId}' from template '${templateId}'`);
+      refreshEntityTemplateMap();
     } else {
       const err = await res.json().catch(() => ({}));
       console.error('Spawn failed:', err.message || res.status);
@@ -2785,3 +2897,4 @@ connectStream();
 loadTaskTypeConfig().then(() => { if (!selectedEntityId) renderPanel(); });
 ensureTasksLoaded();
 loadEntityTemplates();
+refreshEntityTemplateMap();

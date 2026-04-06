@@ -44,7 +44,9 @@ public class SpawnedEntityManagerTests : IDisposable
             RawEntityJson: rawEntityJson ?? MinimalEntityJson,
             Config: config ?? new TemplateConfig(null, 1000, null, null, new Dictionary<string, JsonElement>()),
             BehaviorType: null,
-            LoadContext: null);
+            LoadContext: null,
+            CustomTaskDescriptors: Array.Empty<Google.Protobuf.Reflection.MessageDescriptor>(),
+            RawTaskConfigurationsJson: null);
 
     // -------------------------------------------------------------------------
     // Spawn — basic

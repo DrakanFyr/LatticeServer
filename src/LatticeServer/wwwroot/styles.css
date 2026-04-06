@@ -576,7 +576,9 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #58
 /* ── Map ── */
 #map-wrapper { flex: 1; position: relative; }
 #map { width: 100%; height: 100%; }
-#map-wrapper.picking .leaflet-container { cursor: crosshair !important; }
+#map-wrapper.picking .leaflet-container,
+#map-wrapper.picking .leaflet-marker-icon,
+#map-wrapper.picking .leaflet-marker-shadow { cursor: crosshair !important; }
 #map-pick-banner {
   display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
   background: #d29922; color: #0d1117; font-size: 12px; font-weight: 700;

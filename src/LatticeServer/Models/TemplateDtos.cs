@@ -5,7 +5,8 @@ public record TemplateListItem(
     bool IsTaskable,
     int TickIntervalMs,
     string? Category,
-    string? DisplayName);
+    string? DisplayName,
+    bool HasCustomTaskTypes);
 
 public record SpawnedInstanceInfo(
     string EntityId,

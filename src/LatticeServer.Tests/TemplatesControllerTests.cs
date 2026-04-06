@@ -313,4 +313,50 @@ public class TemplatesControllerTests : IClassFixture<WebApplicationFactory<Prog
         var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal(0, doc.RootElement.GetProperty("despawnedCount").GetInt32());
     }
+
+    // -------------------------------------------------------------------------
+    // GET /api/v1/templates — hasCustomTaskTypes field
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ListTemplates_IncludesHasCustomTaskTypesFalse()
+    {
+        CreateTemplate("alpha");
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.GetAsync("/api/v1/templates");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(1, items.GetArrayLength());
+        Assert.False(items[0].GetProperty("hasCustomTaskTypes").GetBoolean());
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/v1/templates/{templateId}/task-configurations
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetTaskConfigurations_UnknownTemplate_Returns404()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.GetAsync("/api/v1/templates/does-not-exist/task-configurations");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetTaskConfigurations_NoBehaviorDll_ReturnsEmptyArray()
+    {
+        CreateTemplate("alpha");
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.GetAsync("/api/v1/templates/alpha/task-configurations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        Assert.Equal(0, items.GetArrayLength());
+    }
 }

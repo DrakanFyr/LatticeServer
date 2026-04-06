@@ -84,7 +84,10 @@ public class TasksController : ControllerBase
             {
                 task.Specification = ProtobufJsonConverter.FromJson<Google.Protobuf.WellKnownTypes.Any>(spec.GetRawText());
             }
-            catch { /* ignore invalid spec */ }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse task specification JSON.");
+            }
         }
 
         // Parse author

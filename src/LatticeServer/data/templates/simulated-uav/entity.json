@@ -24,7 +24,8 @@
   },
   "taskCatalog": {
     "taskDefinitions": [
-      { "taskSpecificationUrl": "type.googleapis.com/anduril.tasks.v2.Investigate" }
+      { "taskSpecificationUrl": "type.googleapis.com/anduril.tasks.v2.Investigate" },
+      { "taskSpecificationUrl": "type.googleapis.com/lattice.tasks.v1.FlyTo" }
     ]
   }
 }

@@ -1,13 +1,14 @@
 using System.Text.Json;
+using Google.Protobuf.Reflection;
 using LatticeSDK.Templates;
 
 namespace LatticeTemplateSDK;
 
 /// <summary>
 /// Reference behavior: a simulated UAV that moves along a fixed heading,
-/// and navigates toward a target when given an Investigate task.
+/// and navigates toward a target when given an Investigate or FlyTo task.
 /// </summary>
-public class SimulatedUavBehavior : ITaskableEntity
+public class SimulatedUavBehavior : ITaskableEntity, ICustomTaskTypes
 {
     private IEntityPublisher _publisher = null!;
     private ITaskReporter _reporter = null!;
@@ -26,8 +27,16 @@ public class SimulatedUavBehavior : ITaskableEntity
     private string? _activeTaskId;
     private double? _targetLat;
     private double? _targetLon;
+    private double? _targetAlt;
     private string? _targetEntityId;  // non-null when navigating to a live entity
     private bool _navigating;
+
+    private const string FlyToTypeUrl = "type.googleapis.com/lattice.tasks.v1.FlyTo";
+
+    public IEnumerable<MessageDescriptor> GetTaskDescriptors()
+    {
+        yield return Lattice.Tasks.V1.FlyTo.Descriptor;
+    }
 
     public void OnSpawn(string entityId, IEntityPublisher publisher, ITaskReporter reporter, IEntityQuerier querier, TemplateConfig config)
     {
@@ -93,6 +102,16 @@ public class SimulatedUavBehavior : ITaskableEntity
                 _lat += stepM / 111_320.0 * Math.Cos(bearing);
                 _lon += stepM / 111_320.0 * Math.Sin(bearing);
             }
+
+            // Smoothly interpolate altitude toward target if set
+            if (_targetAlt.HasValue && Math.Abs(_altM - _targetAlt.Value) > 0.5)
+            {
+                var altStep = _speedMps * deltaTimeSecs; // climb/descend at same rate as horizontal speed
+                if (_targetAlt.Value > _altM)
+                    _altM = Math.Min(_altM + altStep, _targetAlt.Value);
+                else
+                    _altM = Math.Max(_altM - altStep, _targetAlt.Value);
+            }
         }
         else
         {
@@ -117,12 +136,21 @@ public class SimulatedUavBehavior : ITaskableEntity
 
         // Try to extract target from spec JSON
         _targetEntityId = null;
+        _targetAlt = null;
         try
         {
             using var doc = JsonDocument.Parse(task.SpecificationJson);
             var root = doc.RootElement;
 
-            if (TryExtractEntityId(root, out var entityId))
+            // Check for FlyTo task (top-level lat/lon/alt fields)
+            if (TryExtractFlyTo(root, out var flyLat, out var flyLon, out var flyAlt))
+            {
+                _targetLat = flyLat;
+                _targetLon = flyLon;
+                _targetAlt = flyAlt;
+                _navigating = true;
+            }
+            else if (TryExtractEntityId(root, out var entityId))
             {
                 // Entity objective — seed initial position and track live updates each tick
                 _targetEntityId = entityId;
@@ -158,6 +186,7 @@ public class SimulatedUavBehavior : ITaskableEntity
             _navigating = false;
             _activeTaskId = null;
             _targetEntityId = null;
+            _targetAlt = null;
         }
         _reporter.ReportStatus(taskId, new TaskStatusUpdate(TaskStatusCode.Cancelled));
     }
@@ -169,11 +198,29 @@ public class SimulatedUavBehavior : ITaskableEntity
             _navigating = false;
             _activeTaskId = null;
             _targetEntityId = null;
+            _targetAlt = null;
         }
         _reporter.ReportStatus(taskId, new TaskStatusUpdate(TaskStatusCode.DoneOk));
     }
 
     public void OnDespawn() { }
+
+    private static bool TryExtractFlyTo(JsonElement root, out double lat, out double lon, out double alt)
+    {
+        lat = 0; lon = 0; alt = 0;
+
+        // FlyTo spec: { "latitudeDegrees": ..., "longitudeDegrees": ..., "altitudeHaeMeters": ... }
+        if (root.TryGetProperty("latitudeDegrees", out var latEl) &&
+            root.TryGetProperty("longitudeDegrees", out var lonEl))
+        {
+            lat = latEl.GetDouble();
+            lon = lonEl.GetDouble();
+            alt = root.TryGetProperty("altitudeHaeMeters", out var altEl) ? altEl.GetDouble() : 0;
+            return true;
+        }
+
+        return false;
+    }
 
     private static bool TryExtractEntityId(JsonElement root, out string entityId)
     {

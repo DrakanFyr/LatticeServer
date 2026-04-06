@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package lattice.tasks.v1;
+
+option csharp_namespace = "Lattice.Tasks.V1";
+
+message FlyTo {
+  double latitude_degrees = 1;
+  double longitude_degrees = 2;
+  double altitude_hae_meters = 3;
+}

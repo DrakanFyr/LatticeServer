@@ -244,9 +244,12 @@ public class SpawnedEntityManager : IDisposable
                 {
                     if (taskEvent.EventType == ProtoTaskEventType.Created)
                     {
+                        var specJson = task.Specification != null
+                            ? ProtobufJsonConverter.ToJson(task.Specification)
+                            : "{}";
                         var payload = new TaskPayload(
                             task.Version.TaskId,
-                            ProtobufJsonConverter.ToJson(task.Specification),
+                            specJson,
                             task.Description);
                         instance.Behavior.OnTaskReceived(payload);
                     }
