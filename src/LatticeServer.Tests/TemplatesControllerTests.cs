@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -358,5 +359,200 @@ public class TemplatesControllerTests : IClassFixture<WebApplicationFactory<Prog
         var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(JsonValueKind.Array, items.ValueKind);
         Assert.Equal(0, items.GetArrayLength());
+    }
+
+    // -------------------------------------------------------------------------
+    // ZIP template helpers
+    // -------------------------------------------------------------------------
+
+    private static byte[] CreateMinimalZip(string entityJson = MinimalEntityJson)
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = zip.CreateEntry("entity.json");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write(entityJson);
+        }
+        return ms.ToArray();
+    }
+
+    private static MultipartFormDataContent ZipContent(byte[] zipBytes, string filename = "template.zip")
+    {
+        var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(zipBytes) { Headers = { ContentType = new("application/zip") } },
+            "package", filename);
+        return form;
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/v1/templates
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task UploadTemplate_ValidZip_Returns202AndTemplateLoads()
+    {
+        var (client, appFactory) = await CreateClientAsync();
+        var registry = appFactory.Services.GetRequiredService<TemplateRegistry>();
+
+        var zip = CreateMinimalZip();
+        var response = await client.PostAsync("/api/v1/templates",
+            ZipContent(zip, "uploaded-alpha.zip"));
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("uploaded-alpha", body.RootElement.GetProperty("templateId").GetString());
+
+        // Give the FileSystemWatcher time to detect and load the template
+        await Task.Delay(600);
+        await registry.InitialScanComplete;
+
+        var listResponse = await client.GetAsync("/api/v1/templates");
+        var list = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync()).RootElement;
+        Assert.True(list.EnumerateArray().Any(t => t.GetProperty("templateId").GetString() == "uploaded-alpha"));
+    }
+
+    [Fact]
+    public async Task UploadTemplate_ZipMissingEntityJson_Returns400()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        // ZIP with only config.json, no entity.json
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var e = zip.CreateEntry("config.json");
+            using var w = new StreamWriter(e.Open());
+            w.Write("{}");
+        }
+        var response = await client.PostAsync("/api/v1/templates",
+            ZipContent(ms.ToArray(), "bad.zip"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadTemplate_NotAZip_Returns400()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("not a zip")), "package", "bad.zip");
+
+        var response = await client.PostAsync("/api/v1/templates", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadTemplate_DirectoryTemplateExists_Returns409()
+    {
+        CreateTemplate("alpha");
+        var (client, _) = await CreateClientAsync();
+
+        var zip = CreateMinimalZip();
+        var response = await client.PostAsync("/api/v1/templates",
+            ZipContent(zip, "alpha.zip"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadTemplate_CustomTemplateId_UsesHeaderId()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        var zip = CreateMinimalZip();
+        var form = ZipContent(zip, "somefile.zip");
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/templates") { Content = form };
+        request.Headers.Add("X-Template-Id", "custom-id");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("custom-id", body.RootElement.GetProperty("templateId").GetString());
+    }
+
+    // -------------------------------------------------------------------------
+    // DELETE /api/v1/templates/{templateId}
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task DeleteTemplate_ExistingZip_Returns204()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        // Write a ZIP directly to the temp dir
+        var zipPath = Path.Combine(_tempDir, "to-delete.zip");
+        File.WriteAllBytes(zipPath, CreateMinimalZip());
+        await Task.Delay(400); // let watcher pick it up
+
+        var response = await client.DeleteAsync("/api/v1/templates/to-delete");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.False(File.Exists(zipPath));
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_DirectoryTemplate_Returns409()
+    {
+        CreateTemplate("alpha");
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.DeleteAsync("/api/v1/templates/alpha");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_UnknownId_Returns404()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.DeleteAsync("/api/v1/templates/does-not-exist");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/v1/templates/{templateId}/download
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task DownloadTemplate_ExistingZip_ReturnsZipBytes()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        var zipBytes = CreateMinimalZip();
+        File.WriteAllBytes(Path.Combine(_tempDir, "downloadable.zip"), zipBytes);
+
+        var response = await client.GetAsync("/api/v1/templates/downloadable/download");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/zip", response.Content.Headers.ContentType?.MediaType);
+        var returned = await response.Content.ReadAsByteArrayAsync();
+        Assert.Equal(zipBytes, returned);
+    }
+
+    [Fact]
+    public async Task DownloadTemplate_DirectoryTemplate_Returns409()
+    {
+        CreateTemplate("alpha");
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.GetAsync("/api/v1/templates/alpha/download");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DownloadTemplate_UnknownId_Returns404()
+    {
+        var (client, _) = await CreateClientAsync();
+
+        var response = await client.GetAsync("/api/v1/templates/does-not-exist/download");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

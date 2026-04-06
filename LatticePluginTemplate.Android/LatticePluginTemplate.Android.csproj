@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <!--
+      Override these when using this template:
+        dotnet build -p:TemplateId=my-plugin -p:ApplicationId=com.example.my_plugin
+    -->
+    <ApplicationId>com.lattice.plugin.template</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <AndroidManifest>Platforms/Android/AndroidManifest.xml</AndroidManifest>
+    <TargetPlatformVersion>36.1</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>34</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Plugin DLLs are loaded by LatticeServer at runtime via AssemblyLoadContext.
+      AOT must be off to allow this.
+    -->
+    <PublishAot>false</PublishAot>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <!--
+      The behavior DLL is output as "behavior.dll" so LatticeServer's
+      ZipTemplateReader can locate it by its well-known name.
+    -->
+    <AssemblyName>behavior</AssemblyName>
+    <!--
+      Template ID used in the AndroidManifest meta-data and for the DeployApk target.
+      Override on the command line: -p:TemplateId=my-plugin
+    -->
+    <TemplateId>lattice-plugin-template</TemplateId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.27.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.64.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Custom proto definitions for task types this plugin introduces.
+      Remove if your plugin uses only built-in task types.
+    -->
+    <Protobuf Include="protos/**/*.proto" GrpcServices="None" ProtoRoot="protos" Condition="Exists('protos')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LatticeSDK.Templates\LatticeSDK.Templates.csproj" />
+  </ItemGroup>
+
+  <!--
+    Bundle template files into the APK under assets/.
+    LatticeServer's ApkTemplateSource reads them from assets/ using ZipTemplateReader.
+  -->
+  <ItemGroup>
+    <AndroidAsset Include="entity.json" />
+    <AndroidAsset Include="config.json" Condition="Exists('config.json')" />
+    <AndroidAsset Include="task-configurations.json" Condition="Exists('task-configurations.json')" />
+  </ItemGroup>
+
+  <!--
+    After build, copy behavior.dll into the APK assets so ApkTemplateSource
+    can extract and load it. This target runs after the Android APK is packaged.
+  -->
+  <Target Name="BundleBehaviorDll" AfterTargets="Build">
+    <Message Text="Plugin '$(TemplateId)' built. Install the APK on device to register the template." Importance="high" />
+  </Target>
+
+</Project>

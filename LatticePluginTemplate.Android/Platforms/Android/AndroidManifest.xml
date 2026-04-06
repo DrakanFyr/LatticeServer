@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <application android:label="Lattice Plugin Template" android:hasCode="false">
+    <!--
+      Declare this APK as a Lattice template plugin.
+
+      com.lattice.template      — discovery flag; LatticeServer's ApkTemplateSource
+                                  scans for packages with this key set to "true"
+      com.lattice.template.id   — the template ID registered in LatticeServer.
+                                  Must be unique across all installed plugins.
+                                  Defaults to the package name if omitted.
+
+      Replace "lattice-plugin-template" with your own template ID and update
+      ApplicationId in the .csproj to match.
+    -->
+    <meta-data
+        android:name="com.lattice.template"
+        android:value="true" />
+    <meta-data
+        android:name="com.lattice.template.id"
+        android:value="lattice-plugin-template" />
+  </application>
+
+</manifest>
