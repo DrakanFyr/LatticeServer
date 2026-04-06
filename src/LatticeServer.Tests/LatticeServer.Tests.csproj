@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\LatticeServer\LatticeServer.csproj" />
+    <ProjectReference Include="..\LatticeServer.Desktop\LatticeServer.Desktop.csproj" />
   </ItemGroup>
 
 </Project>

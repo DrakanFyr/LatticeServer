@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required for Kestrel to bind a local socket -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Required to keep the service alive while the app is backgrounded -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--
+      Required on Android 14+ (API 34+) when using foregroundServiceType="specialUse".
+      "specialUse" is the correct type for a general-purpose local API server that does not
+      fit the predefined categories (location, camera, microphone, dataSync, etc.).
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- minSdk 34: required for FOREGROUND_SERVICE_SPECIAL_USE permission -->
+    <uses-sdk android:minSdkVersion="34" />
+
+    <application android:label="Lattice Server" android:allowBackup="false">
+
+        <service
+            android:name="com.lattice.server.LatticeServerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <!--
+              Required for Play Store review when using specialUse.
+              Describes why no predefined foreground service type fits this use case.
+            -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local REST and gRPC API server for Lattice entity and task management" />
+        </service>
+
+    </application>
+
+</manifest>

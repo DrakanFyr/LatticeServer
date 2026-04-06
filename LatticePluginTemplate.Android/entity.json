@@ -1,0 +1,22 @@
+{
+  "entityId": "<new_uuid>",
+  "isLive": true,
+  "expiryTime": "<now+300s>",
+  "aliases": { "name": "Plugin Entity <unique_number>" },
+  "location": {
+    "position": {
+      "latitudeDegrees": 47.6147980,
+      "longitudeDegrees": -122.1949701,
+      "altitudeHaeMeters": 100.0
+    }
+  },
+  "milView": {
+    "disposition": "DISPOSITION_FRIENDLY",
+    "environment": "ENVIRONMENT_AIR"
+  },
+  "provenance": {
+    "integrationName": "LatticeServer-Plugin",
+    "dataType": "Simulation",
+    "sourceUpdateTime": "<now>"
+  }
+}

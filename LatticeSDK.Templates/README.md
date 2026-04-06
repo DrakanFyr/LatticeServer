@@ -14,7 +14,8 @@ The built-in `simulated-uav` template (in `LatticeTemplateSDK/`) is the referenc
 4. [behavior.dll — simulated behavior](#4-behaviordll--simulated-behavior)
 5. [Custom task protobufs](#5-custom-task-protobufs)
 6. [task-configurations.json — UI display configuration](#6-task-configurationsjson--ui-display-configuration)
-7. [Building and deploying](#7-building-and-deploying)
+7. [Building and deploying (desktop)](#7-building-and-deploying-desktop)
+8. [Android APK plugins](#8-android-apk-plugins)
 
 ---
 
@@ -487,7 +488,7 @@ Here, the three raw proto fields are hidden from the form and a single `_locatio
 
 ---
 
-## 7. Building and deploying
+## 7. Building and deploying (desktop)
 
 The recommended approach is to build your behavior project with the same `DeployTemplate` MSBuild target used by `LatticeTemplateSDK`:
 
@@ -516,3 +517,110 @@ dotnet build -p:TemplateId=my-template -p:TemplatesDir=../src/LatticeServer/data
 ```
 
 The server hot-reloads the template immediately after the files are copied. If the server is already running, you can simply rebuild to see changes without restarting.
+
+---
+
+## 8. Android APK plugins
+
+On Android, templates are distributed as APKs rather than folder-based packages. The same four files (`entity.json`, `config.json`, `behavior.dll`, `task-configurations.json`) are bundled into the APK's `assets/` directory. LatticeServer's `ApkTemplateSource` discovers plugins by scanning installed packages for a manifest metadata flag and loads them using the same `ZipTemplateReader` used for desktop ZIPs.
+
+> **Starting point:** The `LatticePluginTemplate.Android/` project in this repository is a ready-to-use template. Copy it and follow the steps below to create your own plugin.
+
+### Project setup
+
+Your plugin is a standard `.NET Android` project. The key differences from the desktop template:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ApplicationId>com.example.my_plugin</ApplicationId>
+    <AndroidManifest>Platforms/Android/AndroidManifest.xml</AndroidManifest>
+    <SupportedOSPlatformVersion>34</SupportedOSPlatformVersion>
+
+    <!-- DLL is loaded at runtime by LatticeServer — AOT must be off -->
+    <PublishAot>false</PublishAot>
+    <RunAOTCompilation>false</RunAOTCompilation>
+
+    <!-- Must be "behavior" so ZipTemplateReader finds it by name -->
+    <AssemblyName>behavior</AssemblyName>
+
+    <TemplateId>my-plugin</TemplateId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../LatticeSDK.Templates/LatticeSDK.Templates.csproj" />
+  </ItemGroup>
+
+  <!-- Bundle template files as APK assets -->
+  <ItemGroup>
+    <AndroidAsset Include="entity.json" />
+    <AndroidAsset Include="config.json" Condition="Exists('config.json')" />
+    <AndroidAsset Include="task-configurations.json" Condition="Exists('task-configurations.json')" />
+  </ItemGroup>
+</Project>
+```
+
+> **Note:** `behavior.dll` does not need to be listed as an `AndroidAsset` — the .NET Android SDK automatically bundles all compiled assemblies into the APK. `ZipTemplateReader` locates it at `assets/behavior.dll` inside the APK ZIP.
+
+### AndroidManifest.xml
+
+Declare two `<meta-data>` entries so LatticeServer can discover your plugin:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:label="My Plugin" android:hasCode="false">
+    <!-- Discovery flag: LatticeServer scans for this key -->
+    <meta-data
+        android:name="com.lattice.template"
+        android:value="true" />
+    <!-- Template ID: must be unique across all installed plugins -->
+    <meta-data
+        android:name="com.lattice.template.id"
+        android:value="my-plugin" />
+  </application>
+</manifest>
+```
+
+`android:hasCode="false"` is correct for a plugin APK — there is no Java/Kotlin code. The `behavior.dll` is loaded by LatticeServer's process, not the plugin APK's own runtime.
+
+The template ID declared here must match the `TemplateId` property in your `.csproj` and the `templateId` fields in your `entity.json` / `config.json`.
+
+### Template files
+
+The same `entity.json`, `config.json`, `behavior.dll`, and `task-configurations.json` files described in sections 2–6 apply unchanged. Place them at the root of your project directory (alongside the `.csproj`) and they will be bundled into `assets/` automatically.
+
+### Behavior DLL
+
+Your behavior class is identical to the desktop version — implement `ITaskableEntity` (and optionally `ICustomTaskTypes`) exactly as described in sections 4 and 5. No Android-specific code is needed in the behavior class itself.
+
+### Building and deploying
+
+```bash
+# Build the APK
+dotnet build -p:TemplateId=my-plugin -p:ApplicationId=com.example.my_plugin
+
+# Install on the running emulator
+dotnet build -t:Install -p:AdbTarget="-e"
+
+# Install on a physical device
+dotnet build -t:Install -p:AdbTarget="-d"
+```
+
+Once the APK is installed, LatticeServer detects it automatically via `PackageManager` and loads the template without a server restart. Reinstalling or updating the APK triggers a hot-reload: the old template is unloaded and the new one is loaded in place.
+
+### Hot-reload behavior
+
+| Event | Server response |
+|-------|----------------|
+| APK installed (new plugin) | Template loaded, available for spawn |
+| APK updated (reinstall) | Old template unloaded, new template loaded |
+| APK uninstalled | Template unloaded, all running instances continue until despawned |
+
+### Troubleshooting
+
+- **Template not discovered:** Check that both `com.lattice.template` and `com.lattice.template.id` are present in `AndroidManifest.xml` and that the APK is fully installed (`adb shell pm list packages | grep your.package.name`).
+- **`entity.json` missing:** LatticeServer logs a warning and skips the APK. Verify the file is listed as `<AndroidAsset>` and that the asset name matches exactly (`entity.json`, lowercase).
+- **DLL load failure:** Ensure `PublishAot=false` and `RunAOTCompilation=false` in your `.csproj`. Dynamic assembly loading is incompatible with AOT.
