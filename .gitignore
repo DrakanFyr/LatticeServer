@@ -80,6 +80,7 @@ publish/
 *.p12
 *.pfx
 *.key
+*.crt
 
 # macOS
 .DS_Store
