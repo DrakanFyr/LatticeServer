@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -21,6 +20,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\LatticeSDK.Templates\LatticeSDK.Templates.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="data/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

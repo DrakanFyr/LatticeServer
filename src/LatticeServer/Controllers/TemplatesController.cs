@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text.Json;
 using Google.Protobuf.Reflection;
 using LatticeServer.Models;
@@ -13,18 +12,15 @@ public class TemplatesController : ControllerBase
     private readonly ILogger<TemplatesController> _logger;
     private readonly TemplateRegistry _registry;
     private readonly SpawnedEntityManager _manager;
-    private readonly FileSystemTemplateSource? _fsSource;
 
     public TemplatesController(
         ILogger<TemplatesController> logger,
         TemplateRegistry registry,
-        SpawnedEntityManager manager,
-        ITemplateSource templateSource)
+        SpawnedEntityManager manager)
     {
         _logger = logger;
         _registry = registry;
         _manager = manager;
-        _fsSource = templateSource as FileSystemTemplateSource;
     }
 
     /// <summary>GET /api/v1/templates — List all loaded templates.</summary>
@@ -128,134 +124,6 @@ public class TemplatesController : ControllerBase
         var count = _manager.DespawnAll();
         _logger.LogInformation("REST: despawned {Count} entities.", count);
         return Ok(new { despawnedCount = count });
-    }
-
-    // -------------------------------------------------------------------------
-    // Template package upload / delete / download
-    // -------------------------------------------------------------------------
-
-    /// <summary>POST /api/v1/templates — Upload a template ZIP package.</summary>
-    [HttpPost("api/v1/templates")]
-    public async Task<IActionResult> UploadTemplate(IFormFile? package)
-    {
-        if (_fsSource == null)
-            return StatusCode(501, new { code = "NOT_SUPPORTED", message = "Template upload is not supported on this host." });
-
-        if (package == null || package.Length == 0)
-            return BadRequest(new { code = "BAD_REQUEST", message = "A file named 'package' must be provided." });
-
-        // Determine template ID
-        string templateId;
-        if (Request.Headers.TryGetValue("X-Template-Id", out var idHeader) && !string.IsNullOrWhiteSpace(idHeader))
-        {
-            templateId = idHeader.ToString().Trim();
-        }
-        else
-        {
-            var filename = Path.GetFileName(package.FileName ?? "");
-            templateId = filename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                ? Path.GetFileNameWithoutExtension(filename)
-                : filename;
-        }
-
-        // Validate template ID
-        if (string.IsNullOrWhiteSpace(templateId) ||
-            templateId.Contains('/') || templateId.Contains('\\') ||
-            templateId.Contains("..") ||
-            templateId.Length > 64)
-        {
-            return BadRequest(new { code = "BAD_REQUEST", message = "Template ID is invalid. Must be non-empty, no path separators, and ≤ 64 characters." });
-        }
-
-        // 409 if a directory-based template with the same ID already exists
-        if (_fsSource.IsDirectoryTemplate(templateId))
-            return Conflict(new { code = "CONFLICT", message = $"A directory-based template '{templateId}' already exists and cannot be overwritten via upload." });
-
-        // Buffer into MemoryStream so we can both validate (requires seeking) and write
-        using var buffer = new MemoryStream((int)package.Length);
-        await package.CopyToAsync(buffer);
-        buffer.Position = 0;
-
-        // Validate ZIP contents
-        try
-        {
-            using var zip = new ZipArchive(buffer, ZipArchiveMode.Read, leaveOpen: true);
-            if (zip.GetEntry("entity.json") == null)
-                return BadRequest(new { code = "BAD_REQUEST", message = "The ZIP package must contain entity.json at the root level." });
-        }
-        catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException)
-        {
-            return BadRequest(new { code = "BAD_REQUEST", message = "The uploaded file is not a valid ZIP archive." });
-        }
-
-        // Write atomically: write to .tmp, then move
-        var watchDir = _fsSource.WatchDirectory;
-        var tmpPath = Path.Combine(watchDir, $"{templateId}.zip.tmp");
-        var finalPath = Path.Combine(watchDir, $"{templateId}.zip");
-
-        try
-        {
-            buffer.Position = 0;
-            await using (var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write))
-            {
-                await buffer.CopyToAsync(fs);
-            }
-            System.IO.File.Move(tmpPath, finalPath, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to write uploaded template '{TemplateId}' to disk.", templateId);
-            try { System.IO.File.Delete(tmpPath); } catch { }
-            return StatusCode(500, new { code = "INTERNAL", message = "Failed to save the uploaded package." });
-        }
-
-        _logger.LogInformation("REST: uploaded template package '{TemplateId}'.", templateId);
-        return Accepted(new { templateId });
-    }
-
-    /// <summary>DELETE /api/v1/templates/{templateId} — Remove an uploaded ZIP template.</summary>
-    [HttpDelete("api/v1/templates/{templateId}")]
-    public IActionResult DeleteTemplate(string templateId)
-    {
-        if (_fsSource == null)
-            return StatusCode(501, new { code = "NOT_SUPPORTED", message = "Template deletion is not supported on this host." });
-
-        if (_fsSource.IsDirectoryTemplate(templateId))
-            return Conflict(new { code = "CONFLICT", message = $"Template '{templateId}' is directory-based and cannot be deleted via API." });
-
-        var zipPath = Path.Combine(_fsSource.WatchDirectory, $"{templateId}.zip");
-        if (!System.IO.File.Exists(zipPath))
-            return NotFound(new { code = "NOT_FOUND", message = $"No uploaded ZIP template '{templateId}' found." });
-
-        try
-        {
-            System.IO.File.Delete(zipPath);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete template '{TemplateId}'.", templateId);
-            return StatusCode(500, new { code = "INTERNAL", message = "Failed to delete the package." });
-        }
-
-        _logger.LogInformation("REST: deleted template package '{TemplateId}'.", templateId);
-        return NoContent();
-    }
-
-    /// <summary>GET /api/v1/templates/{templateId}/download — Download a packaged ZIP template.</summary>
-    [HttpGet("api/v1/templates/{templateId}/download")]
-    public IActionResult DownloadTemplate(string templateId)
-    {
-        if (_fsSource == null)
-            return StatusCode(501, new { code = "NOT_SUPPORTED", message = "Template download is not supported on this host." });
-
-        if (_fsSource.IsDirectoryTemplate(templateId))
-            return Conflict(new { code = "CONFLICT", message = $"Template '{templateId}' is directory-based and cannot be downloaded as a ZIP." });
-
-        var zipPath = Path.Combine(_fsSource.WatchDirectory, $"{templateId}.zip");
-        if (!System.IO.File.Exists(zipPath))
-            return NotFound(new { code = "NOT_FOUND", message = $"No uploaded ZIP template '{templateId}' found." });
-
-        return PhysicalFile(zipPath, "application/zip", $"{templateId}.zip");
     }
 
     // -------------------------------------------------------------------------

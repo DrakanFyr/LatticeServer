@@ -3,8 +3,6 @@ This is a [Visual Studio Code](https://code.visualstudio.com/) project. It imple
 
 ## Prerequisites
 
-### Desktop
-
 | Tool | Minimum Version | Notes |
 |------|----------------|-------|
 | [Visual Studio Code](https://code.visualstudio.com/download) | Latest | Primary IDE |
@@ -12,31 +10,20 @@ This is a [Visual Studio Code](https://code.visualstudio.com/) project. It imple
 | [.NET SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | 10.0 | Required to build and run the server |
 | [OpenSSL](https://www.openssl.org/) | 1.1.1+ | Required to generate local development certificates (see below). On macOS install via `brew install openssl`; on Windows use [Win64 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html) or the version bundled with Git for Windows |
 
-### Android
-
-| Tool | Notes |
-|------|-------|
-| .NET Android workload | `dotnet workload install android` |
-| Android SDK platform 36.1 | Install via Android Studio SDK Manager or `sdkmanager "platforms;android-36"` |
-| Android emulator or physical device (API 34+) | `FOREGROUND_SERVICE_SPECIAL_USE` requires API 34 minimum |
-
 ## Repository Structure
 
 ```
 LatticeServer/
-├── LatticeSDK/                        # Protobuf definitions and API documentation
+├── LatticeSDK/                    # Protobuf definitions and API documentation
 │   ├── protos/
 │   └── docs/
-├── LatticeSDK.Templates/              # SDK for authoring templated entities (behavior DLLs)
-├── LatticeTemplateSDK/                # Reference template — simulated UAV (desktop)
-├── LatticePluginTemplate.Android/     # Reference template — Android APK plugin
+├── LatticeSDK.Templates/          # SDK for authoring templated entities (behavior DLLs)
+├── LatticeTemplateSDK/            # Reference template — simulated UAV
 ├── src/
-│   ├── LatticeServer/                 # Core ASP.NET Core server library
-│   ├── LatticeServer.Desktop/         # Desktop host (thin exe, entry point for dotnet run)
-│   ├── LatticeServer.Android/         # Android host (foreground service + APK plugin discovery)
-│   ├── LatticeServer.Tests/           # xUnit integration tests
-│   ├── LatticeClient/                 # Example gRPC client library
-│   └── LatticeClientTest/             # Client test suite
+│   ├── LatticeServer/             # Main ASP.NET Core server
+│   ├── LatticeServer.Tests/       # xUnit integration tests
+│   ├── LatticeClient/             # Example gRPC client library
+│   └── LatticeClientTest/         # Client test suite
 └── LatticeServer.sln
 ```
 
@@ -50,26 +37,24 @@ LatticeServer supports **templated entities** — reusable entity blueprints tha
 - Defining custom task types with protobuf and `ICustomTaskTypes`
 - Customising the task form UI with `task-configurations.json`
 
-The `LatticeTemplateSDK/` project is the reference desktop implementation (a simulated UAV that navigates to task objectives). The `LatticePluginTemplate.Android/` project is the equivalent starting point for Android APK plugins.
+The `LatticeTemplateSDK/` project is the reference implementation (a simulated UAV that navigates to task objectives).
 
 ## Quick Start
 
-### Desktop
-
-#### 1. Build
+### 1. Build
 
 ```bash
 dotnet build
 ```
 
-#### 2. Generate and trust a local certificate
+### 2. Generate and trust a local certificate
 
 Follow the [Trusted Local Certificate Setup](#trusted-local-certificate-setup) section below before running for the first time. The HTTPS endpoint will not start without a valid `localhost.p12` at the repository root.
 
-#### 3. Run
+### 3. Run
 
 ```bash
-dotnet run --project src/LatticeServer.Desktop/LatticeServer.Desktop.csproj
+dotnet run --project src/LatticeServer/LatticeServer.csproj
 ```
 
 The server starts two endpoints:
@@ -81,58 +66,10 @@ The server starts two endpoints:
 
 A web dashboard is served at `http://localhost:5007` in your browser once the server is running.
 
-#### 4. Run the tests
+### 4. Run the tests
 
 ```bash
 dotnet test
-```
-
-### Android
-
-#### 1. Build the APK
-
-```bash
-dotnet build src/LatticeServer.Android/LatticeServer.Android.csproj
-```
-
-#### 2. Deploy to emulator or device
-
-```bash
-dotnet build src/LatticeServer.Android/LatticeServer.Android.csproj \
-  -t:Install -p:AdbTarget="-e"
-```
-
-`-p:AdbTarget="-e"` targets the running emulator. Use `-p:AdbTarget="-d"` for a physical device, or `-p:AdbTarget="-s <serial>"` for a specific device.
-
-#### 3. Launch
-
-Open the **Lattice Server** app on the device and tap **Start Server**. The server starts a foreground service and begins listening on port 5007. The status line shows `running on port 5007` once ready.
-
-#### 4. Connect clients
-
-The Android server listens on `http://0.0.0.0:5007` using HTTP/2 cleartext (h2c). See [Connecting clients to the Android server](#connecting-clients-to-the-android-server) for client-specific setup.
-
-#### 5. Install template plugins
-
-Template plugins are distributed as APKs. Install a plugin APK on the same device and the server picks it up automatically — no restart required. See the [Android Plugin Authoring Guide](LatticeSDK.Templates/README.md#8-android-apk-plugins) for how to build a plugin.
-
-## Connecting clients to the Android server
-
-The Android server uses **h2c (HTTP/2 cleartext)** on port 5007. TLS is unnecessary for loopback traffic and adds certificate management complexity on Android. Clients connecting to the Android-hosted server need a one-time configuration change to allow unencrypted HTTP/2.
-
-| Client | Required change |
-|--------|----------------|
-| **.NET** (`Grpc.Net.Client`) | `AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true)` before creating any channel, then `GrpcChannel.ForAddress("http://<device-ip>:5007")` |
-| **Go** | `grpc.Dial("device-ip:5007", grpc.WithTransportCredentials(insecure.NewCredentials()))` |
-| **Python** | `grpc.insecure_channel("device-ip:5007")` |
-| **REST** | No change — plain HTTP works as before |
-
-> **Emulator note:** When connecting from the host machine to a running emulator, use `http://localhost:5007` (adb reverse maps device port 5007 to the host). When connecting from another device on the same network, use the device's LAN IP address.
-
-To set up adb reverse port forwarding from the emulator to the host:
-
-```bash
-adb reverse tcp:5007 tcp:5007
 ```
 
 ## Configuration

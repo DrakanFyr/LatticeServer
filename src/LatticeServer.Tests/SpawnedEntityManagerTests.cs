@@ -40,7 +40,7 @@ public class SpawnedEntityManagerTests : IDisposable
         TemplateConfig? config = null) =>
         new(
             TemplateId: id,
-            SourcePath: "/fake/path",
+            FolderPath: "/fake/path",
             RawEntityJson: rawEntityJson ?? MinimalEntityJson,
             Config: config ?? new TemplateConfig(null, 1000, null, null, new Dictionary<string, JsonElement>()),
             BehaviorType: null,
