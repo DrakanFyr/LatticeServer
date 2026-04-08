@@ -7,7 +7,13 @@ public class LatticeApp
 {
     public static WebApplication CreateApp(string[] args, Action<WebApplicationBuilder>? configure = null)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            // When the host project (Desktop, Android) is different from the library,
+            // wwwroot lives in the output directory, not the source content root.
+            WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot")
+        });
 
         // When the host project (Desktop, Android) is different from the library,
         // the content root won't contain appsettings.json. Load it from the output
