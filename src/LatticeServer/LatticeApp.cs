@@ -9,6 +9,18 @@ public class LatticeApp
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        // When the host project (Desktop, Android) is different from the library,
+        // the content root won't contain appsettings.json. Load it from the output
+        // directory so Kestrel endpoints and other settings are picked up.
+        var baseSettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        if (File.Exists(baseSettings))
+        {
+            builder.Configuration.AddJsonFile(baseSettings, optional: false, reloadOnChange: false);
+            var env = builder.Environment.EnvironmentName;
+            var envSettings = Path.Combine(AppContext.BaseDirectory, $"appsettings.{env}.json");
+            builder.Configuration.AddJsonFile(envSettings, optional: true, reloadOnChange: false);
+        }
+
         // Allow caller (e.g. Android host) to register overrides before defaults
         configure?.Invoke(builder);
 

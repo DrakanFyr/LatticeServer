@@ -25,6 +25,9 @@ public class FileSystemTemplateSource : ITemplateSource
     {
         _logger = logger;
         var dataDir = configuration["DataDirectory"] ?? ".";
+        if (!Path.IsPathRooted(dataDir))
+            dataDir = Path.Combine(AppContext.BaseDirectory, dataDir);
+
         var watchDir = configuration["Templates:WatchDirectory"] ?? "templates";
         WatchDirectory = Path.IsPathRooted(watchDir)
             ? watchDir

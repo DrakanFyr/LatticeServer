@@ -36,6 +36,11 @@ public class ScenarioService : BackgroundService
             return;
         }
 
+        // Resolve relative paths against the output directory so the config is found
+        // regardless of which host project (Desktop, Android) is running.
+        if (!Path.IsPathRooted(dataDir))
+            dataDir = Path.Combine(AppContext.BaseDirectory, dataDir);
+
         var configPath = Path.IsPathRooted(rawPath)
             ? rawPath
             : Path.GetFullPath(Path.Combine(dataDir, rawPath));

@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="data\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The Web SDK excludes *.dll from default content items, so include behavior DLLs explicitly -->
+    <Content Include="data\**\behavior.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Grpc.AspNetCore" Version="2.64.0" />
     <PackageReference Include="Google.Protobuf" Version="3.27.2" />
     <PackageReference Include="Grpc.AspNetCore.Web" Version="2.64.0" />
