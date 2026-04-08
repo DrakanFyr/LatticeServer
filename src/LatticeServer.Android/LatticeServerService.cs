@@ -2,6 +2,8 @@ using Android.App;
 using Android.Content;
 using Android.OS;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using LatticeServer.Services;
 
@@ -30,6 +32,10 @@ public class LatticeServerService : Service
         // Must be set before any HTTP client is created; enables gRPC over h2c (HTTP/2 cleartext)
         AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
+        // Supress the hosting startup assembly discovery which fails on Android
+        // with an empty assembly name from the environment.
+        System.Environment.SetEnvironmentVariable("ASPNETCORE_HOSTINGSTARTUPASSEMBLIES", null);
+
         EnsureNotificationChannel();
         StartForeground(NotificationId, BuildNotification("Lattice Server running on port 5007"));
 
@@ -41,10 +47,23 @@ public class LatticeServerService : Service
 
                 _app = LatticeServer.LatticeApp.CreateApp([], builder =>
                 {
-                    // Inject Android-specific paths and h2c Kestrel configuration.
-                    // These run before TryAddSingleton defaults in CreateLatticeApp,
-                    // so they take precedence.
+                    // Inject Android-specific paths.
                     builder.Configuration.AddAndroidDefaults();
+
+                    // Serve the web dashboard from the copied wwwroot in FilesDir
+                    var filesDir = global::Android.App.Application.Context.FilesDir!.AbsolutePath;
+                    builder.Environment.WebRootPath = Path.Combine(filesDir, "wwwroot");
+
+                    // Configure Kestrel programmaically for h2c (HTTP/2 cleartext).
+                    // This overrides config-based endpoints (including the HTTPS endpoint
+                    // from appsettings.json that requires a certificate unavailable on Android).
+                    builder.WebHost.ConfigureKestrel(options =>
+                    {
+                        options.ListenAnyIP(5007, listenOptions =>
+                        {
+                            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+                        });
+                    });
 
                     // Register the Android APK plugin source. TryAddSingleton in
                     // CreateLatticeApp will skip FileSystemTemplateSource because

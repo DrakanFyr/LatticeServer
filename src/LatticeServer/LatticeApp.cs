@@ -35,13 +35,14 @@ public class LatticeApp
         {
             options.AddDefaultPolicy(policy =>
             {
-                policy.WithOrigins("http://localhost:5173", "https://localhost:5173")
+                policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "http://localhost:5007")
                       .AllowAnyHeader()
                       .AllowAnyMethod()
                       .WithExposedHeaders("Grpc-Status", "Grpc-Message", "Grpc-Encoding", "Grpc-Accept-Encoding");
             });
         });
         builder.Services.AddControllers()
+            .AddApplicationPart(typeof(LatticeApp).Assembly)
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;

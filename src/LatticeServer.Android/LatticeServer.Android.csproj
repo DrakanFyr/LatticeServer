@@ -28,20 +28,60 @@
   </ItemGroup>
 
   <!--
-    ASP.NET Core does not ship a separate Android runtime pack (NETSDK1082).
-    Its assemblies reach the APK via the project reference to LatticeServer.
-    Suppress the runtime pack resolution for Microsoft.AspNetCore.App on Android.
+    ASP.NET Core does not ship an Android runtime pack (NETSDK1082).
+    Workaround: suppress runtime pack resolution, then directly reference the
+    ASP.NET Core IL assemblies from the win-x64 runtime pack in the NuGet cache.
+    These are pure IL (no native code) and run fine on the Mono runtime on Android.
+    This is intentionally hardcoded to the specific verion in the local NuGet ceache.
   -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'">
     <KnownFrameworkReference Update="Microsoft.AspNetCore.App"
         RuntimePackNamePatterns=""
-        DefaultRuntimeFrameworkVersion="10.0.0"
-        LatestRuntimeFrameworkVersion="10.0.0"
-        Condition="'$(TargetPlatformIdentifier)' == 'android'" />
+        DefaultRuntimeFrameworkVersion="10.0.5"
+        LatestRuntimeFrameworkVersion="10.0.5" />
   </ItemGroup>
+
+  <!-- Ensure the win-x64 runtime pack NuGet package is downloaded -->
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'">
+    <PackageDownload Include="Microsoft.AspNetCore.App.Runtime.win-x64" Version="10.0.5" />
+  </ItemGroup>
+
+  <!--
+    Inject the ASP.NET Core assemblies into the publish output so the Android
+    packager includes them in the APK. ComputeFilesToPublish normally gets these
+    from the runtime pack; since we suppressed it, we add them manually from
+    the win-x64 runtime pack (they are pure IL, no native code).
+  -->
+  <Target Name="_InjectAspNetCoreAssemblies" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(TargetPlatformIdentifier)' == 'android'">
+    <PropertyGroup>
+      <_AspNetCoreLibPath>$(NuGetPackageRoot)microsoft.aspnetcore.app.runtime.win-x64\10.0.5\runtimes\win-x64\lib\net10.0</_AspNetCoreLibPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AspNetCoreDlls Include="$(_AspNetCoreLibPath)\*.dll" />
+      <!--
+        Build a delimited list of ASP.NET Core assembly filenames so we can
+        remvove older NuGet versions of the same assemblies (e.g. Microsoft.Extensions.*)
+        that were pulled in transitively by Grpc.AspNetCore.
+      -->
+    </ItemGroup>
+    <PropertyGroup>
+      <_AspNetCoreFileList>;@(_AspNetCoreDlls->'%(Filename)', ';');</_AspNetCoreFileList>
+    </PropertyGroup>
+    <ItemGroup>
+      <ResolvedFilesToPublish Remove="@(ResolvedFilesToPublish)"
+          Condition="'%(Extension)' == '.dll' and $(_AspNetCoreFileList.Contains(';%(Filename);'))" />
+      <ResolveFilesToPublish Include="@(_AspNetCoreDlls)"
+          RelativePath="%(Filename)%(Extension)"
+          CopyToPublishDirectory="PreserveNewest"
+          AssetType="runtime" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <!-- Default data bundled into the APK; copied to FilesDir on first launch -->
     <AndroidAsset Include="Assets/**" />
+    <!-- Bundle the web dashboard from the LatticeServer project -->
+    <AndroidAsset Include="../LatticeServer/Assets/**" Link="Assets/wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

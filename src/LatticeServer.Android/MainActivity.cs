@@ -23,6 +23,12 @@ public class MainActivity : Activity
     {
         base.OnCreate(savedInstanceState);
 
+        // Auto-start the server when the activity launches
+        if (!IsServiceRunning())
+        {
+            StartForegroundService(new Intent(this, typeof(LatticeServerService)));
+        }
+
         var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
         root.SetPadding(48, 80, 48, 48);
 
