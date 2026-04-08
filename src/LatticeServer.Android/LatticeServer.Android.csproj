@@ -43,7 +43,7 @@
 
   <!-- Ensure the win-x64 runtime pack NuGet package is downloaded -->
   <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'">
-    <PackageDownload Include="Microsoft.AspNetCore.App.Runtime.win-x64" Version="10.0.5" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Runtime.win-x64" Version="[10.0.5]" />
   </ItemGroup>
 
   <!--
